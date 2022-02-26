@@ -14,7 +14,7 @@ checkpoint:
 
 task:
   _name: audio_pretraining
-  data: ???
+  data: /home/v-ziyangma/data/LibriSpeech/manifest/debug/
   max_sample_size: 320000
   min_sample_size: 32000
   normalize: true
@@ -26,9 +26,11 @@ dataset:
   validate_interval: 5
   required_batch_size_multiple: 1
   disable_validation: true
+  train_subset: test-clean
+  valid_subset: test-clean
 
 distributed_training:
-  distributed_world_size: 16
+  distributed_world_size: 4
   ddp_backend: legacy_ddp
 
 criterion:
@@ -41,6 +43,7 @@ criterion:
 optimization:
   max_update: 400000
   lr: [0.0005]
+  update_freq: [16]
 
 optimizer:
   _name: adam
