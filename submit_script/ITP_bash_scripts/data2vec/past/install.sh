@@ -1,6 +1,6 @@
 #!/bin/bash
 set -x
-source /miniconda/etc/profile.d/conda.sh
+source ~/miniconda/etc/profile.d/conda.sh
 conda env list
 echo 'Create fairseq env...'
 conda create -n fairseq python=3.8
