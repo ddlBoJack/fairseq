@@ -26,11 +26,9 @@ dataset:
   validate_interval: 5
   required_batch_size_multiple: 1
   disable_validation: true
-  train_subset: test-clean
-  valid_subset: test-clean
 
 distributed_training:
-  distributed_world_size: 4
+  # distributed_world_size: 4
   ddp_backend: legacy_ddp
 
 criterion:
