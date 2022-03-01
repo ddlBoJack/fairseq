@@ -34,7 +34,7 @@ echo "Work directory: $(pwd)"
 export PYTHONPATH=${pwd}:$PYTHONPATH
 echo 'fairseq install...'
 pip install --editable ./
-# python setup.py build_ext --inplace
+python setup.py build_ext --inplace
 echo -e '\n'
 
 # source ~/miniconda/etc/profile.d/conda.sh
