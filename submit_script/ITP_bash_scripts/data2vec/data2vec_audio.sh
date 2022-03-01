@@ -53,7 +53,7 @@ config_name=base_librispeech
 #edit your data
 data_path=${prefix_dir}/data/manifest/debug/
 train_subset=train_960
-valid_subset=dev_other
+valid_subset=dev_clean
 
 #edit your ckpt
 model_path=${prefix_dir}/model/${model_name}/${exp_name}

@@ -28,7 +28,7 @@ dataset:
   disable_validation: true
 
 distributed_training:
-  distributed_world_size: 8
+  distributed_world_size: 16
   ddp_backend: legacy_ddp
 
 criterion:
@@ -41,7 +41,7 @@ criterion:
 optimization:
   max_update: 400000
   lr: [0.0005]
-  update_freq: [8]
+  update_freq: [1]
 
 optimizer:
   _name: adam
