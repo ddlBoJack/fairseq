@@ -60,8 +60,8 @@ train_subset=train_960
 valid_subset=dev_clean
 
 # edit your compute resource
-distributed_world_size=4
-update_freq=[4]
+distributed_world_size=16
+update_freq=[1]
 
 #edit your ckpt
 model_path=${prefix_dir}/model/${model_name}/${exp_name}

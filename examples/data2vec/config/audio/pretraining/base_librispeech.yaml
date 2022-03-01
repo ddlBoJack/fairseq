@@ -21,7 +21,7 @@ task:
 
 dataset:
   num_workers: 6
-  max_tokens: 380000
+  max_tokens: 3800000
   skip_invalid_size_inputs_valid_test: true
   validate_interval: 5
   required_batch_size_multiple: 1
@@ -30,7 +30,7 @@ dataset:
   valid_subset: test-clean
 
 distributed_training:
-  distributed_world_size: 4
+  distributed_world_size: 16
   ddp_backend: legacy_ddp
 
 criterion:
@@ -43,7 +43,7 @@ criterion:
 optimization:
   max_update: 400000
   lr: [0.0005]
-  update_freq: [16]
+  update_freq: [1]
 
 optimizer:
   _name: adam

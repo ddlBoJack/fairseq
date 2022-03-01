@@ -14,16 +14,20 @@ cd ~/github/fairseq
 
 # edit your exp
 model_name=data2vec
-exp_name=data2vec_debug
+exp_name=data2vec_nlp_debug
 
 #edit your config
 config_dir=~/github/fairseq/config/data2vec/test/pretraining
 config_name=base
 
 #edit your data
-data_path=~/data/LibriSpeech/manifest/debug/
+data_path=~/data/LibriSpeech/manifest/debug/ #TODO
 train_subset=test-clean
 valid_subset=test-clean
+
+# edit your compute resource
+distributed_world_size=4
+update_freq=[4]
 
 #edit your ckpt
 model_path=~/model/${model_name}/${exp_name}
@@ -44,7 +48,9 @@ dataset.train_subset=${train_subset}  \
 dataset.valid_subset=${valid_subset}  \
 checkpoint.save_dir=${model_path}  \
 common.tensorboard_logdir=${tb_path} \
-common.log_file=${log_file}
+common.log_file=${log_file}  \
+distributed_training.distributed_world_size=${distributed_world_size}  \
+optimization.update_freq=${update_freq}
 
 # finetune
 #TODO: add finetune
