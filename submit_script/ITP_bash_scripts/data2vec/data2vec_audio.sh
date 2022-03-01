@@ -32,6 +32,10 @@ sudo apt-get -y install libsndfile1
 # git checkout v-ziyangma
 echo "Work directory: $(pwd)"
 export PYTHONPATH=${pwd}:$PYTHONPATH
+echo "Work directory: $(pwd)"
+echo "PATH: $PATH"
+export PATH=~/.local/bin:$PATH
+echo "PATH: $PATH"
 echo 'fairseq install...'
 pip install --editable ./
 python setup.py build_ext --inplace
@@ -55,6 +59,10 @@ data_path=${prefix_dir}/data/manifest/debug/
 train_subset=train_960
 valid_subset=dev_clean
 
+# edit your compute resource
+distributed_world_size=4
+update_freq=[4]
+
 #edit your ckpt
 model_path=${prefix_dir}/model/${model_name}/${exp_name}
 mkdir -p ${model_path}
@@ -75,7 +83,9 @@ dataset.train_subset=${train_subset}  \
 dataset.valid_subset=${valid_subset}  \
 checkpoint.save_dir=${model_path}  \
 common.tensorboard_logdir=${tb_path} \
-common.log_file=${log_file}
+common.log_file=${log_file}  \
+distributed_training.distributed_world_size=${distributed_world_size}  \
+optimization.update_freq=${update_freq}
 
 # finetune
 #TODO: add finetune
