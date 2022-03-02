@@ -1,20 +1,20 @@
 #!/bin/bash
-set -x
+# set -x
+cd /datablob/users/v-ziyangma/code/fairseq
+export PYTHONPATH=/datablob/users/v-ziyangma/code/fairseq:$PYTHONPATH
 
-# This block install conda.
-# wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
-# bash ./Miniconda3-latest-Linux-x86_64.sh -b -p $HOME/miniconda
-# ~/miniconda/bin/conda init $(echo $SHELL | awk -F '/' '{print $NF}')
-# echo 'Successfully installed miniconda...'
-# echo -n 'Conda version: '
-# ~/miniconda/bin/conda --version
-# echo -e '\n'
+sudo chmod 777 -R /miniconda
+pip install bitarray
+pip install tensorboardX
+pip install sacrebleu
+pip install Cython
+python setup.py build_ext --inplace
 
 # This block setup user environment.
 source /miniconda/etc/profile.d/conda.sh
 conda env list
 echo 'Create fairseq env...'
-conda create -n fairseq python=3.8
+conda create -n fairseq -y -q
 conda init $(echo $SHELL | awk -F '/' '{print $NF}')
 source ~/.bashrc
 conda env list
@@ -27,9 +27,8 @@ pip install tensorboardX
 pip install Cython
 pip install soundfile
 sudo apt-get -y install libsndfile1
-# git clone https://github.com/ddlBoJack/fairseq.git
+# git clone -b v-ziyangma https://github.com/ddlBoJack/fairseq.git
 # cd fairseq
-# git checkout v-ziyangma
 echo "Work directory: $(pwd)"
 export PYTHONPATH=${pwd}:$PYTHONPATH
 echo "Work directory: $(pwd)"
@@ -48,7 +47,7 @@ echo -e '\n'
 # edit your exp
 prefix_dir=/datablob/users/v-ziyangma
 model_name=data2vec
-exp_name=data2vec_960h_devclean
+exp_name=data2vec_960h_devclean_test2xG4
 
 #edit your config
 config_dir=./config/data2vec/audio/pretraining
@@ -60,8 +59,8 @@ train_subset=train_960
 valid_subset=dev_clean
 
 # edit your compute resource
-distributed_world_size=16
-update_freq=[2]
+distributed_world_size=8
+update_freq=[4]
 max_tokens=1900000
 
 #edit your ckpt
