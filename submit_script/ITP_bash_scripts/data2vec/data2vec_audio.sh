@@ -11,16 +11,16 @@ set -x
 # echo -e '\n'
 
 # This block setup user environment.
-# source ~/miniconda/etc/profile.d/conda.sh
-# conda env list
-# echo 'Create fairseq env...'
-# conda create -n fairseq python=3.8
-# conda init $(echo $SHELL | awk -F '/' '{print $NF}')
-# source ~/.bashrc
-# conda env list
-# echo 'Activate fairseq env...'
-# conda activate fairseq
-# conda info --env
+source /miniconda/etc/profile.d/conda.sh
+conda env list
+echo 'Create fairseq env...'
+conda create -n fairseq python=3.8
+conda init $(echo $SHELL | awk -F '/' '{print $NF}')
+source ~/.bashrc
+conda env list
+echo 'Activate fairseq env...'
+conda activate fairseq
+conda info --env
 
 # This block install components.
 pip install tensorboardX
@@ -48,7 +48,7 @@ echo -e '\n'
 # edit your exp
 prefix_dir=/datablob/users/v-ziyangma
 model_name=data2vec
-exp_name=data2vec_960h_devother
+exp_name=data2vec_960h_devclean
 
 #edit your config
 config_dir=./config/data2vec/audio/pretraining
@@ -57,11 +57,12 @@ config_name=base_librispeech
 #edit your data
 data_path=${prefix_dir}/data/manifest/debug/
 train_subset=train_960
-valid_subset=dev_other
+valid_subset=dev_clean
 
 # edit your compute resource
 distributed_world_size=16
-update_freq=[1]
+update_freq=[2]
+max_tokens=1900000
 
 #edit your ckpt
 model_path=${prefix_dir}/model/${model_name}/${exp_name}
@@ -85,7 +86,8 @@ checkpoint.save_dir=${model_path}  \
 common.tensorboard_logdir=${tb_path} \
 common.log_file=${log_file}  \
 distributed_training.distributed_world_size=${distributed_world_size}  \
-optimization.update_freq=${update_freq}
+optimization.update_freq=${update_freq} \
+dataset.max_tokens=${max_tokens}
 
 # finetune
 #TODO: add finetune
