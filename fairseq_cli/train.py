@@ -93,12 +93,12 @@ def main(cfg: FairseqConfig) -> None:
         with fsdp_enable_wrap(cfg.distributed_training):
             model = fsdp_wrap(task.build_model(cfg.model))
     else:
-        model = task.build_model(cfg.model)
+        model = task.build_model(cfg.model) # v-ziyangma: __init__ in model
     criterion = task.build_criterion(cfg.criterion)
     logger.info(model)
-    logger.info("task: {}".format(task.__class__.__name__))
-    logger.info("model: {}".format(model.__class__.__name__))
-    logger.info("criterion: {}".format(criterion.__class__.__name__))
+    logger.info("task: {}".format(task.__class__.__name__)) # v-ziyangma: the data flow
+    logger.info("model: {}".format(model.__class__.__name__)) # v-ziyangma: the model architecture
+    logger.info("criterion: {}".format(criterion.__class__.__name__)) # v-ziyangma: the loss function
     logger.info(
         "num. shared model params: {:,} (num. trained: {:,})".format(
             sum(
@@ -130,7 +130,7 @@ def main(cfg: FairseqConfig) -> None:
         task.load_dataset("valid", combine=True, epoch=1)
     else:
         for valid_sub_split in cfg.dataset.valid_subset.split(","):
-            task.load_dataset(valid_sub_split, combine=False, epoch=1)
+            task.load_dataset(valid_sub_split, combine=False, epoch=1) # v-ziyangma: only load the manifest file of the valid dataset
 
     # (optionally) Configure quantization
     if cfg.common.quantization_config_path is not None:
@@ -161,12 +161,13 @@ def main(cfg: FairseqConfig) -> None:
 
     # Load the latest checkpoint if one is available and restore the
     # corresponding train iterator
+    # v-ziyangma: Load only the manifest file of the train dataset with trainer.get_train_iterator() in this function, and return the epoch_itr
     extra_state, epoch_itr = checkpoint_utils.load_checkpoint(
         cfg.checkpoint,
         trainer,
         # don't cache epoch iterators for sharded datasets
         disable_iterator_cache=task.has_sharded_data("train"),
-    )
+    ) # v-ziyangma: change the checkpoint using `checkpoint.restore_file`.
     if cfg.common.tpu:
         import torch_xla.core.xla_model as xm
 
@@ -187,7 +188,7 @@ def main(cfg: FairseqConfig) -> None:
             break
 
         # train for one epoch
-        valid_losses, should_stop = train(cfg, trainer, task, epoch_itr)
+        valid_losses, should_stop = train(cfg, trainer, task, epoch_itr) # v-ziyangma: train one epoch
         if should_stop:
             break
 
@@ -298,11 +299,11 @@ def train(
     should_stop = False
     num_updates = trainer.get_num_updates()
     logger.info("Start iterating over samples")
-    for i, samples in enumerate(progress):
+    for i, samples in enumerate(progress): # v-ziyangma: samples: update_freq * batch_size * num_tokens, and batch_size * num_tokens < max_tokens
         with metrics.aggregate("train_inner"), torch.autograd.profiler.record_function(
             "train_step-%d" % i
         ):
-            log_output = trainer.train_step(samples)
+            log_output = trainer.train_step(samples) # v-ziyangma: train one all-reduce step
 
         if log_output is not None:  # not OOM, overflow, ...
             # log mid-epoch stats

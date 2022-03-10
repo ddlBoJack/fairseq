@@ -87,7 +87,8 @@ def build_model(cfg: FairseqDataclass, task, from_checkpoint=False):
         if isinstance(cfg, argparse.Namespace):
             cfg = dc.from_namespace(cfg)
         else:
-            cfg = merge_with_parent(dc(), cfg, from_checkpoint)
+            #v-ziangma: if from_checkpoint is true, delete the items in cfg that are not in dc.
+            cfg = merge_with_parent(dc(), cfg, from_checkpoint) 
     else:
         if model_type in ARCH_CONFIG_REGISTRY:
             with open_dict(cfg) if OmegaConf.is_config(cfg) else ExitStack():

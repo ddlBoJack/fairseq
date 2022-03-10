@@ -96,53 +96,54 @@ class Data2VecAudioModel(BaseFairseqModel):
         super().__init__()
         self.cfg = cfg
 
-        feature_enc_layers = eval(cfg.conv_feature_layers)
-        self.extractor_embed = feature_enc_layers[-1][0]
+        feature_enc_layers = eval(cfg.conv_feature_layers) # v-ziyangma: [(512, 10, 5)] + [(512, 3, 2)] * 4 + [(512,2,2)] + [(512,2,2)], x/320
+        self.extractor_embed = feature_enc_layers[-1][0] # v-ziyangma: 512
 
         self.ema = None
-        self.embed = cfg.encoder_embed_dim
+        self.embed = cfg.encoder_embed_dim # v-ziyangma: 768
 
-        self.average_top_k_layers = cfg.average_top_k_layers
-        self.loss_beta = cfg.loss_beta
-        self.loss_scale = cfg.loss_scale
+        self.average_top_k_layers = cfg.average_top_k_layers # v-ziyangma: 8, how many layers to compute the loss on
+        self.loss_beta = cfg.loss_beta # v-ziyangma: 0.0
+        self.loss_scale = cfg.loss_scale # v-ziyangma: None
 
         self.feature_extractor = ConvFeatureExtractionModel(
             conv_layers=feature_enc_layers,
             dropout=0.0,
             mode=cfg.extractor_mode,
             conv_bias=cfg.conv_bias,
-        )
+        ) # v-ziyangma: from wav2vec2
 
-        self.post_extract_proj = nn.Linear(self.extractor_embed, cfg.encoder_embed_dim)
+        self.post_extract_proj = nn.Linear(self.extractor_embed, cfg.encoder_embed_dim) # v-ziyangma: after x/320, proj with 512 -> 768 for transformer
 
-        self.mask_prob = cfg.mask_prob
-        self.mask_selection = cfg.mask_selection
-        self.mask_other = cfg.mask_other
-        self.mask_length = cfg.mask_length
-        self.no_mask_overlap = cfg.no_mask_overlap
-        self.mask_min_space = cfg.mask_min_space
+        self.mask_prob = cfg.mask_prob # v-ziyangma: 0.65
+        self.mask_selection = cfg.mask_selection # v-ziyangma: static; todo: dynamic
+        self.mask_other = cfg.mask_other # v-ziyangma: 0.0
+        self.mask_length = cfg.mask_length # v-ziyangma: 10
+        self.no_mask_overlap = cfg.no_mask_overlap # v-ziyangma: False
+        self.mask_min_space = cfg.mask_min_space # v-ziyangma: 1
 
-        self.mask_channel_prob = cfg.mask_channel_prob
-        self.mask_channel_before = cfg.mask_channel_before
-        self.mask_channel_selection = cfg.mask_channel_selection
-        self.mask_channel_other = cfg.mask_channel_other
-        self.mask_channel_length = cfg.mask_channel_length
-        self.no_mask_channel_overlap = cfg.no_mask_channel_overlap
-        self.mask_channel_min_space = cfg.mask_channel_min_space
+        # v-ziyangma: no channel masking by default
+        self.mask_channel_prob = cfg.mask_channel_prob # v-ziyangma: 0.0
+        self.mask_channel_before = cfg.mask_channel_before # v-ziyangma: False
+        self.mask_channel_selection = cfg.mask_channel_selection # v-ziyangma: static
+        self.mask_channel_other = cfg.mask_channel_other # v-ziyangma: 0.0
+        self.mask_channel_length = cfg.mask_channel_length # v-ziyangma: 10
+        self.no_mask_channel_overlap = cfg.no_mask_channel_overlap # v-ziyangma: False
+        self.mask_channel_min_space = cfg.mask_channel_min_space # v-ziyangma: 1
 
-        self.dropout_input = nn.Dropout(cfg.dropout_input)
-        self.dropout_features = nn.Dropout(cfg.dropout_features)
+        self.dropout_input = nn.Dropout(cfg.dropout_input) # v-ziyangma: 0.0
+        self.dropout_features = nn.Dropout(cfg.dropout_features) # v-ziyangma: 0.0
 
-        self.feature_grad_mult = cfg.feature_grad_mult
+        self.feature_grad_mult = cfg.feature_grad_mult # v-ziyangma: 1.0
 
         self.mask_emb = nn.Parameter(
             torch.FloatTensor(cfg.encoder_embed_dim).uniform_()
-        )
+        ) # v-ziyangma: torch.Size([768])
 
-        self.encoder = TransformerEncoder(cfg)
-        self.layer_norm = LayerNorm(self.extractor_embed)
+        self.encoder = TransformerEncoder(cfg) # v-ziyangma: from wav2vec2
+        self.layer_norm = LayerNorm(self.extractor_embed) # v-ziyangma: LayerNorm(512)
 
-        self.final_proj = nn.Linear(self.embed, self.embed)
+        self.final_proj = nn.Linear(self.embed, self.embed) # v-ziyangma: p768 -> 768
 
         self.num_updates = 0
 
@@ -156,6 +157,17 @@ class Data2VecAudioModel(BaseFairseqModel):
             self.cfg.ema_transformer_only = True
             for k, _ in self.encoder.pos_conv.named_parameters():
                 skip_keys.add(f"pos_conv.{k}")
+                # skip_keys：              
+                # 'pos_conv.1.0.weight'
+                # 'pos_conv.3.0.bias'
+                # 'pos_conv.4.0.weight'
+                # 'pos_conv.0.0.bias'
+                # 'pos_conv.2.0.bias'
+                # 'pos_conv.4.0.bias'
+                # 'pos_conv.2.0.weight'
+                # 'pos_conv.0.0.weight'
+                # 'pos_conv.1.0.bias'
+                # 'pos_conv.3.0.weight'
 
         self.ema = EMAModule(
             self.encoder if self.cfg.ema_transformer_only else self,
@@ -306,7 +318,7 @@ class Data2VecAudioModel(BaseFairseqModel):
         mask_channel_indices=None,
         padding_count=None,
     ):
-        features = source
+        features = source # v-ziyangma: batch_size x seq_len
 
         if self.feature_grad_mult > 0:
             features = self.feature_extractor(features)

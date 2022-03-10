@@ -3,22 +3,18 @@ set -x
 
 # edit your exp
 prefix_dir=/datablob/users/v-ziyangma
-model_name=data2vec
-exp_name=data2vec_960h_devother
+model_name=roberta
+exp_name=roberta_phone_pretrain
 
 #edit your config
-config_dir=./config/data2vec/audio/pretraining
-config_name=base_librispeech
+config_dir=./config/roberta
+config_name=phone_base
 
 #edit your data
-data_path=${prefix_dir}/data/manifest/debug/
-train_subset=train_960
-valid_subset=dev_other
+data_path=${prefix_dir}/data/roberta/data-bin
 
 # edit your compute resource
-distributed_world_size=16
-update_freq=[2]
-max_tokens=1900000
+distributed_world_size=8
 
 #edit your ckpt
 model_path=${prefix_dir}/model/${model_name}/${exp_name}
@@ -37,14 +33,14 @@ echo -e '\n'
 --config-dir ${config_dir}  \
 --config-name ${config_name}  \
 task.data=${data_path}  \
-dataset.train_subset=${train_subset}  \
-dataset.valid_subset=${valid_subset}  \
 checkpoint.save_dir=${model_path}  \
 common.tensorboard_logdir=${tb_path} \
 common.log_file=${log_file}  \
-distributed_training.distributed_world_size=${distributed_world_size}  \
-optimization.update_freq=${update_freq} \
-dataset.max_tokens=${max_tokens}
+distributed_training.distributed_world_size=${distributed_world_size}
+# reference: 
+# https://github.com/pytorch/fairseq/tree/main/examples/roberta
+# https://github.com/pytorch/fairseq/blob/main/examples/roberta/README.pretraining.md
+# https://github.com/pytorch/fairseq/tree/main/examples/language_model
 
 # finetune
 #TODO: add finetune

@@ -3,12 +3,11 @@
 common:
   fp16: true
   log_format: json
-  log_interval: 200
+  log_interval: 1
   tensorboard_logdir: ???
 
 checkpoint:
-  save_interval: 5
-  save_interval_updates: 25000
+  save_interval_updates: 5
   keep_interval_updates: 1
   no_epoch_checkpoints: true
 
@@ -20,12 +19,12 @@ task:
   normalize: true
 
 dataset:
-  num_workers: 6
-  max_tokens: 3800000
+  num_workers: 1
+  max_tokens: 1400000
   skip_invalid_size_inputs_valid_test: true
-  validate_interval: 5
+  validate_interval_updates: 5
   required_batch_size_multiple: 1
-  disable_validation: false
+  disable_validation: true
 
 distributed_training:
   distributed_world_size: 16

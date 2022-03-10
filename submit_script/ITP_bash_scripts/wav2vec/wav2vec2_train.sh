@@ -3,22 +3,21 @@ set -x
 
 # edit your exp
 prefix_dir=/datablob/users/v-ziyangma
-model_name=data2vec
-exp_name=data2vec_960h_devother
+model_name=wav2vec2
+exp_name=wav2vec2_960h_devclean
 
 #edit your config
-config_dir=./config/data2vec/audio/pretraining
-config_name=base_librispeech
+config_dir=./examples/wav2vec/config/pretraining
+config_name=wav2vec2_base_librispeech
 
 #edit your data
 data_path=${prefix_dir}/data/manifest/debug/
 train_subset=train_960
-valid_subset=dev_other
+valid_subset=dev_clean
 
 # edit your compute resource
-distributed_world_size=16
-update_freq=[2]
-max_tokens=1900000
+distributed_world_size=8
+update_freq=[8]
 
 #edit your ckpt
 model_path=${prefix_dir}/model/${model_name}/${exp_name}
@@ -43,8 +42,7 @@ checkpoint.save_dir=${model_path}  \
 common.tensorboard_logdir=${tb_path} \
 common.log_file=${log_file}  \
 distributed_training.distributed_world_size=${distributed_world_size}  \
-optimization.update_freq=${update_freq} \
-dataset.max_tokens=${max_tokens}
+optimization.update_freq=${update_freq}
 
 # finetune
 #TODO: add finetune
