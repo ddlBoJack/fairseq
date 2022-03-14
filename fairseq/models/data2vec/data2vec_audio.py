@@ -138,7 +138,7 @@ class Data2VecAudioModel(BaseFairseqModel):
 
         self.mask_emb = nn.Parameter(
             torch.FloatTensor(cfg.encoder_embed_dim).uniform_()
-        ) # v-ziyangma: torch.Size([768])
+        ) # v-ziyangma: torch.Size([768]), from a uniform distribution
 
         self.encoder = TransformerEncoder(cfg) # v-ziyangma: from wav2vec2
         self.layer_norm = LayerNorm(self.extractor_embed) # v-ziyangma: LayerNorm(512)
@@ -148,6 +148,7 @@ class Data2VecAudioModel(BaseFairseqModel):
         self.num_updates = 0
 
     def make_ema_teacher(self):
+        # v-ziyangma: "We found it more efficient and slightly more accurate to share the parameters of the feature encoder and the positional encoder between the teacher and student networks."
         ema_config = EMAModuleConfig(
             ema_decay=self.cfg.ema_decay,
             ema_fp32=True,
@@ -264,7 +265,7 @@ class Data2VecAudioModel(BaseFairseqModel):
                     mask_dropout=self.cfg.mask_dropout,
                 )
                 mask_indices = torch.from_numpy(mask_indices).to(x.device)
-            x = index_put(x, mask_indices, self.mask_emb)
+            x = index_put(x, mask_indices, self.mask_emb) # v-ziyangma: WHY using mask_emb(nn.Parameter)?
         else:
             mask_indices = None
 
@@ -321,14 +322,14 @@ class Data2VecAudioModel(BaseFairseqModel):
         features = source # v-ziyangma: batch_size x seq_len
 
         if self.feature_grad_mult > 0:
-            features = self.feature_extractor(features)
+            features = self.feature_extractor(features) # v-ziyangma: batch_size x feature_dim x seq_len(downsampled)
             if self.feature_grad_mult != 1.0:
-                features = GradMultiply.apply(features, self.feature_grad_mult)
+                features = GradMultiply.apply(features, self.feature_grad_mult) # v-ziyangma: scale the backward gradient
         else:
             with torch.no_grad():
                 features = self.feature_extractor(features)
 
-        features = features.transpose(1, 2)
+        features = features.transpose(1, 2) # # v-ziyangma: batch_size x seq_len x feature_dim
 
         features = self.layer_norm(features)
 
@@ -356,9 +357,9 @@ class Data2VecAudioModel(BaseFairseqModel):
             padding_mask = None
 
         if self.post_extract_proj is not None:
-            features = self.post_extract_proj(features)
+            features = self.post_extract_proj(features) # v-ziyangma: 512 -> 768
 
-        pre_encoder_features = None
+        pre_encoder_features = None # v-ziyangma: unmasked features input of the teacher.
         if self.cfg.ema_transformer_only:
             pre_encoder_features = features.clone()
 
@@ -370,7 +371,7 @@ class Data2VecAudioModel(BaseFairseqModel):
                 padding_mask,
                 mask_indices=mask_indices,
                 mask_channel_indices=mask_channel_indices,
-            )
+            ) # v-ziyangma: x: batch_size x seq_len x feature_dim, mask_indices: batch_size x seq_len with True/False
         else:
             x = features
             mask_indices = None
@@ -400,7 +401,7 @@ class Data2VecAudioModel(BaseFairseqModel):
                     pre_encoder_features,
                     padding_mask=padding_mask,
                     min_layer=self.cfg.encoder_layers - self.average_top_k_layers,
-                )
+                ) # v-ziyangma: layer_results return top_k_layers' results
                 y = {
                     "x": y,
                     "padding_mask": padding_mask,
@@ -413,7 +414,7 @@ class Data2VecAudioModel(BaseFairseqModel):
                     mask=False,
                 )
 
-            target_layer_results = [l[2] for l in y["layer_results"]]
+            target_layer_results = [l[2] for l in y["layer_results"]] # v-ziyangma: layer_results is layers before dropout3, residual, final_layer_norm.
 
             permuted = False
             if self.cfg.instance_norm_target_layer or self.cfg.batch_norm_target_layer:
@@ -463,10 +464,10 @@ class Data2VecAudioModel(BaseFairseqModel):
             if not permuted:
                 y = y.transpose(0, 1)
 
-            y = y[mask_indices]
+            y = y[mask_indices] # v-ziyangma: total_length x feature_dim
 
         x = x[mask_indices]
-        x = self.final_proj(x)
+        x = self.final_proj(x) # v-ziyangma: WHY final_proj?
 
         sz = x.size(-1)
 

@@ -38,7 +38,7 @@ class EMAModule:
         """
 
         self.decay = config.ema_decay
-        self.model = copy.deepcopy(model)
+        self.model = copy.deepcopy(model) # v-ziyangma: WHY init with self.model?
         self.model.requires_grad_(False)
         self.config = config
         self.skip_keys = skip_keys or set()

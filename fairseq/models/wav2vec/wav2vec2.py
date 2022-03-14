@@ -953,7 +953,7 @@ class TransformerEncoder(nn.Module):
         self.embedding_dim = args.encoder_embed_dim # v-ziyangma: 768
         self.required_seq_len_multiple = args.required_seq_len_multiple # v-ziyangma: 2
 
-        # v-ziyangma: we use a convolutional layer which acts as relative positional embedding.conv -> GELU -> layer normalization
+        # v-ziyangma: we use a convolutional layer which acts as relative positional embedding. conv -> GELU -> layer normalization
         pos_conv_depth = getattr(args, "pos_conv_depth", 1)
         if pos_conv_depth > 1:
             num_layers = args.pos_conv_depth
@@ -996,7 +996,7 @@ class TransformerEncoder(nn.Module):
         ) # v-ziyangma: 12
         self.layer_norm_first = args.layer_norm_first
         self.layer_norm = LayerNorm(self.embedding_dim)
-        self.layerdrop = args.encoder_layerdrop
+        self.layerdrop = args.encoder_layerdrop # v-ziyangma: skip training some layers if np.random.random() < layerdrop
 
         self.apply(init_bert_params)
 
@@ -1019,7 +1019,7 @@ class TransformerEncoder(nn.Module):
         if padding_mask is not None:
             x = index_put(x, padding_mask, 0)
 
-        x_conv = self.pos_conv(x.transpose(1, 2))
+        x_conv = self.pos_conv(x.transpose(1, 2)) # v-ziyangma: position embedding
         x_conv = x_conv.transpose(1, 2)
         x = x + x_conv
 

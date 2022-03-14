@@ -506,7 +506,7 @@ class FairseqTask(object):
                 - logging outputs to display while training
         """
         model.train()
-        model.set_num_updates(update_num) # v-ziyangma : exec self.make_ema_teacher() in data2vec model
+        model.set_num_updates(update_num) # v-ziyangma : exec self.make_ema_teacher() or self.ema.step() in data2vec model
         with torch.autograd.profiler.record_function("forward"):
             with torch.cuda.amp.autocast(enabled=(isinstance(optimizer, AMPOptimizer))):
                 loss, sample_size, logging_output = criterion(model, sample) # v-ziyangma: forward pass

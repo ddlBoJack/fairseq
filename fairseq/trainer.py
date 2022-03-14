@@ -828,7 +828,7 @@ class Trainer(object):
                         update_num=self.get_num_updates(),
                         ignore_grad=is_dummy_batch,
                         **extra_kwargs,
-                    ) # v-ziyangma : train one batch
+                    ) # v-ziyangma : train one sub-batch
                     del loss
 
                 logging_outputs.append(logging_output)

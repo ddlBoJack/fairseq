@@ -12,13 +12,13 @@ config_name=debug
 
 #edit your data
 data_path=~/data/LibriSpeech/manifest/debug/
-train_subset=test-clean
+train_subset=train_960
 valid_subset=test-clean
 
 # edit your compute resource
-distributed_world_size=1
-update_freq=[2]
-max_tokens=1000000
+# distributed_world_size=1
+# update_freq=[2]
+# max_tokens=1000000
 
 #edit your ckpt
 model_path=~/model/${model_name}/${exp_name}
@@ -40,9 +40,9 @@ dataset.valid_subset=${valid_subset}  \
 checkpoint.save_dir=${model_path}  \
 common.tensorboard_logdir=${tb_path} \
 common.log_file=${log_file}  \
-distributed_training.distributed_world_size=${distributed_world_size}  \
-optimization.update_freq=${update_freq} \
-dataset.max_tokens=${max_tokens}
+# distributed_training.distributed_world_size=${distributed_world_size}  \
+# optimization.update_freq=${update_freq} \
+# dataset.max_tokens=${max_tokens}
 
 # finetune
 #TODO: add finetune
