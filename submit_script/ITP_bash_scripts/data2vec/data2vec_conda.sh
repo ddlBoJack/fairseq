@@ -28,6 +28,7 @@ conda info --env
 
 # This block install components.
 ~/miniconda/bin/pip install tensorboardX
+~/miniconda/bin/pip install editdistance
 ~/miniconda/bin/pip install Cython
 ~/miniconda/bin/pip install soundfile
 sudo apt-get -y install libsndfile1
