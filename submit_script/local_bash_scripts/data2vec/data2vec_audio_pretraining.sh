@@ -11,7 +11,7 @@ config_dir=~/github/fairseq/config/data2vec/audio/pretraining
 config_name=debug
 
 #edit your data
-data_path=~/data/LibriSpeech/manifest/debug/
+data_path=~/data/LibriSpeech/manifest/pretraining/
 train_subset=train_960
 valid_subset=test-clean
 

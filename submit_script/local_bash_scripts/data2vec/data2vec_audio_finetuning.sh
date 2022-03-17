@@ -30,8 +30,8 @@ finetuning_output_dir=~/log/${model_name}/${exp_name}/${train_subset}_${valid_su
 echo "Start finetuning!!!"
 echo -e '\n'
 # finetuning
-# python -m debugpy --listen 5678 --wait-for-client fairseq_cli/hydra_train.py  \
-python fairseq_cli/hydra_train.py  \
+# python fairseq_cli/hydra_train.py  \
+python -m debugpy --listen 5678 --wait-for-client fairseq_cli/hydra_train.py  \
 --config-dir ${config_dir}  \
 --config-name ${config_name}  \
 task.data=${data_path}  \

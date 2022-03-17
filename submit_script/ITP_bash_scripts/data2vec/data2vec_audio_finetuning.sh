@@ -4,7 +4,7 @@ set -x
 # edit your exp
 prefix_dir=/datablob/users/v-ziyangma
 model_name=data2vec
-exp_name=data2vec_debug_finetuning
+exp_name=data2vec_finetuning_320w
 
 #edit your config
 config_dir=./config/data2vec/audio/finetuning
@@ -16,9 +16,9 @@ train_subset=train_clean_100
 valid_subset=dev_other
 
 # edit your compute resource
-distributed_world_size=16
+distributed_world_size=8
 update_freq=[1]
-max_tokens=1600000
+max_tokens=3200000
 
 #edit your pretrained model
 model_path=${prefix_dir}/model/${model_name}/data2vec_960h_devclean/checkpoint_best.pt

@@ -130,7 +130,7 @@ def main(cfg: FairseqConfig) -> None:
         task.load_dataset("valid", combine=True, epoch=1)
     else:
         for valid_sub_split in cfg.dataset.valid_subset.split(","):
-            task.load_dataset(valid_sub_split, combine=False, epoch=1) # v-ziyangma: only load the manifest file of the valid dataset
+            task.load_dataset(valid_sub_split, combine=False, epoch=1) # v-ziyangma: only load the manifest file of the valid dataset for speech, load the whole file for NLP.
 
     # (optionally) Configure quantization
     if cfg.common.quantization_config_path is not None:
