@@ -179,7 +179,7 @@ class Data2VecAudioModel(BaseFairseqModel):
     def set_num_updates(self, num_updates):
         super().set_num_updates(num_updates)
 
-        if self.ema is None and self.final_proj is not None: # v-ziyangma: finetuning mode got self.final_proj is None.
+        if self.ema is None and self.final_proj is not None:
             logger.info(f"making ema teacher")
             self.make_ema_teacher()
         elif self.training and self.ema is not None:

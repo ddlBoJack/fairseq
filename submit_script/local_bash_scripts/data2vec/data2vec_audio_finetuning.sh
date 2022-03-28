@@ -11,9 +11,9 @@ config_dir=~/github/fairseq/config/data2vec/audio/finetuning
 config_name=debug
 
 #edit your data
-data_path=~/data/LibriSpeech/manifest/finetuning/
-train_subset=train_clean_100
-valid_subset=dev_other
+data_path=~/data/LibriSpeech/manifest/resource/
+train_subset=test_clean
+valid_subset=test_clean
 
 #edit your pretrained model
 model_path=/home/v-ziyangma/model/data2vec/data2vec_debug/checkpoint_last.pt

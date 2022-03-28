@@ -7,16 +7,17 @@ common:
   tensorboard_logdir: ???
 
 checkpoint:
-  save_interval_updates: 5000
+  save_interval_updates: 1
   keep_interval_updates: 1
   no_epoch_checkpoints: true
 
 task:
-  _name: audio_pretraining
+  _name: data2vec_uni_pretraining
   data: ???
   max_sample_size: 320000
   min_sample_size: 32000
   normalize: true
+  labels: phn
 
 dataset:
   num_workers: 1
@@ -36,6 +37,8 @@ criterion:
     - ema_decay
     - target_var
     - pred_var
+    - text_target_var
+    - text_pred_var
 
 optimization:
   max_update: 400000
@@ -53,7 +56,7 @@ lr_scheduler:
   phase_ratio: [0.03,0.9,0.07]
 
 model:
-  _name: data2vec_audio
+  _name: data2vec_uni
   extractor_mode: layer_norm
   encoder_layerdrop: 0.05
   dropout_input: 0.0
@@ -81,3 +84,37 @@ model:
 
   require_same_masks: true
   mask_dropout: 0
+
+  ########## below are for text teacher ##########
+  text_model_path: /home/v-ziyangma/model/roberta/roberta_phone_pretrain/checkpoint_best.pt
+  text_max_positions: 512
+
+  text_head_layers: 2
+  text_average_top_k_layers: 10
+  text_layer_norm_target_layer: true
+  text_loss_scale: 1
+  text_ema_decay: 0.999
+  text_ema_end_decay: 0.9999
+  text_ema_anneal_end_step: 300000
+  text_loss_beta: 4
+  text_ema_transformer_layers_only: true
+
+  text_transformer:
+    dropout: 0.1
+    attention_dropout: 0.1
+    layernorm_embedding: true
+    activation_fn: gelu
+    no_scale_embedding: true
+    max_source_positions: 512
+    encoder:
+      embed_dim: 768
+      ffn_embed_dim: 3072
+      layers: 12
+      attention_heads: 12
+      normalize_before: false
+      learned_pos: true
+      layerdrop: 0
+
+  text_teacher: true
+  text_init_transformer: false
+  text_do_ema: true

@@ -17,7 +17,7 @@ import torch.distributed as dist
 
 from fairseq.modules import EMAModule, EMAModuleConfig
 from fairseq.data.data_utils import compute_mask_indices
-from fairseq.models import BaseFairseqModel, register_model
+from fairseq.models import BaseFairseqModel, register_model, FairseqEncoder
 from fairseq.models.wav2vec import (
     ConvFeatureExtractionModel,
     Wav2Vec2Config,
@@ -29,12 +29,18 @@ from fairseq.modules import (
 )
 from fairseq.utils import index_put
 
+from fairseq.models.transformer import TransformerConfig
+from fairseq.models.transformer import TransformerEncoder as TextTransformerEncoder
+from fairseq.modules.transformer_sentence_encoder import init_bert_params
+
+from .cross_model_ema_module import CrossModelEMAModule
+
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class Data2VecAudioConfig(Wav2Vec2Config):
+class Data2VecUniConfig(Wav2Vec2Config):
 
     loss_beta: float = field(
         default=0, metadata={"help": "beta for smooth l1 loss. 0 means use l2 loss"}
@@ -83,6 +89,67 @@ class Data2VecAudioConfig(Wav2Vec2Config):
         metadata={"help": "stop training if prediction var falls below this"},
     )
 
+    ########## below are for text teacher ##########
+    text_model_path: Optional[str] = field(
+        default=None, metadata={"help": "path to pretrained text model"}
+    )
+
+    text_max_positions: int = field(
+        default=512, metadata={"help": "max sequence length"}
+    )
+
+    text_head_layers: int = 1
+
+    text_transformer: TransformerConfig = TransformerConfig()
+
+    text_loss_beta: float = field(
+        default=0, metadata={"help": "beta for smooth l1 loss. 0 means use l2 loss"}
+    )
+    text_loss_scale: Optional[float] = field(
+        default=None,
+        metadata={
+            "help": "scale the reconstruction loss by this constant. if None then scales by 1/sqrt(dim)"
+        },
+    )
+    text_average_top_k_layers: int = field(
+        default=8, metadata={"help": "how many layers to average"}
+    )
+
+    text_layer_norm_target_layer: bool = False
+    text_instance_norm_target_layer: bool = False
+    text_batch_norm_target_layer: bool = False
+    text_instance_norm_targets: bool = False
+    text_layer_norm_targets: bool = False
+
+    text_ema_decay: float = field(
+        default=0.999, 
+        metadata={"help": "initial ema decay rate"}
+        )
+    text_ema_end_decay: float = field(
+        default=0.9999, metadata={"help": "final ema decay rate"}
+    )
+
+    # when to finish annealing ema decay rate
+    text_ema_anneal_end_step: int = II("optimization.max_update")
+
+    text_ema_transformer_layers_only: bool = field(
+        default=True,
+        metadata={"help": "whether to momentum update only the transformer layers"},
+    )
+    text_teacher: bool = field(
+        default=False, metadata={"help": "whether to use text teacher"}
+        )
+
+    text_init_transformer: bool = field(
+        default=False, 
+        metadata={"help": "whether to init the transformer of the text model"}
+        )
+    
+    text_do_ema: bool = field(
+        default=True, 
+        metadata={"help": "whether to use ema"}
+        )
+
 
 def get_annealed_rate(start, end, curr_step, total_steps):
     r = end - start
@@ -90,9 +157,9 @@ def get_annealed_rate(start, end, curr_step, total_steps):
     return end - r * pct_remaining
 
 
-@register_model("data2vec_audio", dataclass=Data2VecAudioConfig)
-class Data2VecAudioModel(BaseFairseqModel):
-    def __init__(self, cfg: Data2VecAudioConfig):
+@register_model("data2vec_uni", dataclass=Data2VecUniConfig)
+class Data2VecUniModel(BaseFairseqModel):
+    def __init__(self, cfg: Data2VecUniConfig, text_encoder):
         super().__init__()
         self.cfg = cfg
 
@@ -147,6 +214,12 @@ class Data2VecAudioModel(BaseFairseqModel):
 
         self.num_updates = 0
 
+        # for text model
+        self.text_encoder = text_encoder
+        self.text_ema = None
+        self.text_final_proj = nn.Linear(self.embed, self.embed) if self.text_encoder != None else None # v-ziyangma: p768 -> 768
+
+
     def make_ema_teacher(self):
         # v-ziyangma: "We found it more efficient and slightly more accurate to share the parameters of the feature encoder and the positional encoder between the teacher and student networks."
         ema_config = EMAModuleConfig(
@@ -175,12 +248,48 @@ class Data2VecAudioModel(BaseFairseqModel):
             ema_config,
             skip_keys=skip_keys,
         )
+    
+    def make_text_ema_teacher(self):
+        ema_config = EMAModuleConfig(
+            ema_decay=self.cfg.text_ema_decay,
+            ema_fp32=True,
+        )
+        skip_keys = set()
+        if self.cfg.text_ema_transformer_layers_only:
+            for k, _ in self.text_encoder.sentence_encoder.embed_positions.named_parameters():
+                skip_keys.add(f"embed_tokens.{k}")
+            for k, _ in self.text_encoder.sentence_encoder.embed_positions.named_parameters():
+                skip_keys.add(f"embed_positions.{k}")
+            if self.text_encoder.sentence_encoder.layernorm_embedding is not None:
+                for (
+                    k,
+                    _,
+                ) in self.text_encoder.sentence_encoder.layernorm_embedding.named_parameters():
+                    skip_keys.add(f"layernorm_embedding.{k}")
+            if self.text_encoder.sentence_encoder.layer_norm is not None:
+                for k, _ in self.text_encoder.sentence_encoder.layer_norm.named_parameters():
+                    skip_keys.add(f"layernorm_embedding.{k}")
+                    self.text_encoder.text_ema
+            
+            for k, _ in self.encoder.pos_conv.named_parameters():
+                skip_keys.add(f"pos_conv.{k}")
+            if self.encoder.layer_norm is not None:
+                for k, _ in self.encoder.layer_norm.named_parameters():
+                    skip_keys.add(f"layer_norm.{k}")
+
+        self.text_ema = CrossModelEMAModule(
+            self.text_encoder.sentence_encoder,
+            ema_config,
+            skip_keys=skip_keys,
+        )
+
+        del self.text_encoder.sentence_encoder
 
     def set_num_updates(self, num_updates):
         super().set_num_updates(num_updates)
 
-        if self.ema is None and self.final_proj is not None: # v-ziyangma: finetuning mode got self.final_proj is None.
-            logger.info(f"making ema teacher")
+        if self.ema is None and self.final_proj is not None:
+            logger.info(f"making speech ema teacher")
             self.make_ema_teacher()
         elif self.training and self.ema is not None:
             if self.cfg.ema_decay != self.cfg.ema_end_decay:
@@ -196,6 +305,26 @@ class Data2VecAudioModel(BaseFairseqModel):
                 self.ema.set_decay(decay)
             if self.ema.get_decay() < 1:
                 self.ema.step(self.encoder if self.cfg.ema_transformer_only else self)
+        
+
+        if self.cfg.text_teacher and self.cfg.text_do_ema:
+            if self.text_ema is None and self.text_encoder.regression_head is not None:
+                logger.info(f"making text ema teacher")
+                self.make_text_ema_teacher()
+            elif self.training and self.ema is not None:
+                if self.cfg.text_ema_decay != self.cfg.text_ema_end_decay:
+                    if num_updates >= self.cfg.text_ema_anneal_end_step:
+                        text_decay = self.cfg.text_ema_end_decay
+                    else:
+                        text_decay = get_annealed_rate(
+                        self.cfg.text_ema_decay,
+                        self.cfg.text_ema_end_decay,
+                        num_updates,
+                        self.cfg.text_ema_anneal_end_step,
+                        )
+                    self.text_ema.set_decay(text_decay)
+                if self.text_ema.get_decay() < 1:
+                    self.text_ema.step(self.encoder)
 
         self.num_updates = num_updates
 
@@ -216,10 +345,36 @@ class Data2VecAudioModel(BaseFairseqModel):
         return super()._load_from_state_dict(state_dict, prefix, *args, **kwargs)
 
     @classmethod
-    def build_model(cls, cfg: Data2VecAudioConfig, task=None):
+    def build_model(cls, cfg: Data2VecUniConfig, task=None):
         """Build a new model instance."""
+        if cfg.text_teacher: 
 
-        return cls(cfg)
+            if cfg.text_model_path is not None:
+                text_encoder = Data2VecTextEncoder(cfg, task.target_dictionary)
+            
+            pretrained_model = torch.load(cfg.text_model_path)
+            state_dict = text_encoder.state_dict()
+            text_model_key = [name for name in text_encoder.state_dict()]
+            logger.info(f"loading text model from {cfg.text_model_path} ...")
+            if cfg.text_init_transformer:
+                pass # TODO: init the embed_tokens.weight and embed_positions.weight from the pretrained model.
+            else:
+                for key in pretrained_model["model"].keys():
+                    local_key = ".".join(key.split(".")[1:])
+                    if local_key in state_dict:
+                        # logger.info(f"loading {local_key} from {key} in {cfg.text_model_path}")
+                        state_dict[local_key].copy_(pretrained_model["model"][key])
+                        text_model_key.remove(local_key)
+                    else:
+                        logger.info(f"skipping key: {key} in {cfg.text_model_path}")
+                for key in text_model_key:
+                    logger.info(f"initializing key: {key} in {text_encoder.__class__.__name__}")
+        
+        else:
+            text_encoder = None
+
+        
+        return cls(cfg, text_encoder)
 
     def apply_mask(
         self,
@@ -311,6 +466,10 @@ class Data2VecAudioModel(BaseFairseqModel):
     def forward(
         self,
         source,
+        target,
+        meta,
+        target_lengths,
+        ntokens,
         padding_mask=None,
         mask=True,
         features_only=False,
@@ -466,8 +625,71 @@ class Data2VecAudioModel(BaseFairseqModel):
 
             y = y[mask_indices] # v-ziyangma: total_length x feature_dim
 
+
+            # below are for text teacher model
+            if self.cfg.text_teacher: 
+                self.text_ema.model.eval()
+                text_encoder_out = self.text_ema.model(
+                    target,
+                    return_all_hiddens=True,
+                )
+                text_y = text_encoder_out["fc_results"]
+                text_y = text_y[-self.text_encoder.average_top_k_layers :]
+
+                permuted = False
+                if self.cfg.text_instance_norm_target_layer or self.cfg.text_batch_norm_target_layer:
+                    text_y = [tl.permute(1, 2, 0) for tl in text_y]  # TBC -> BCT
+                    permuted = True
+
+                if self.cfg.text_batch_norm_target_layer:
+                    text_y = [
+                        F.batch_norm(
+                            tl.float(), running_mean=None, running_var=None, training=True
+                        )
+                        for tl in text_y
+                    ]
+
+                if self.cfg.text_instance_norm_target_layer:
+                    text_y = [F.instance_norm(tl.float()) for tl in text_y]
+
+                if permuted:
+                    text_y = [tl.transpose(1, 2) for tl in text_y]  # BCT -> BTC
+
+                if self.cfg.text_layer_norm_target_layer:
+                    text_y = [F.layer_norm(tl.float(), tl.shape[-1:]) for tl in text_y]
+
+                text_y = sum(text_y) / len(text_y)
+
+                if not permuted:
+                    text_y = text_y.transpose(0, 1)
+
+                if self.cfg.text_layer_norm_targets:
+                    text_y = F.layer_norm(text_y.float(), text_y.shape[-1:])
+
+                if self.cfg.text_instance_norm_targets:
+                    text_y = F.instance_norm(text_y.transpose(1, 2)).transpose(1, 2)
+
+                # do upsampling with text_y and meta
+                text_upsampling_list = []
+                for sentence, sentence_meta in zip(text_y, meta):
+                    sentence_upsampling = torch.cat(
+                        [token_.repeat(meta_,1) for token_ ,meta_ in zip(sentence, sentence_meta)], dim=0
+                    )
+                    if len(sentence_upsampling) < len(mask_indices[0]):
+                        sentence_upsampling = torch.cat(
+                            [sentence_upsampling, sentence_upsampling.new_zeros(len(mask_indices[0]) - len(sentence_upsampling), text_y.size(-1))], dim=0
+                        ).unsqueeze(0)
+                    else:
+                        sentence_upsampling = sentence_upsampling[:len(mask_indices[0])].unsqueeze(0)
+                    text_upsampling_list.append(sentence_upsampling)
+                text_upsampling = torch.cat(text_upsampling_list, dim=0)
+                assert (text_upsampling.size() == x.size()), f"text_upsampling.size() = {text_upsampling.size()} does not match x.size() = {x.size()}"
+                text_y = text_upsampling[mask_indices]
+
+        # compute loss
         x = x[mask_indices]
-        x = self.final_proj(x) # v-ziyangma: WHY final_proj?
+        x = self.final_proj(x)
+        text_x = self.text_encoder.regression_head(x) if self.cfg.text_teacher else None
 
         sz = x.size(-1)
 
@@ -477,13 +699,27 @@ class Data2VecAudioModel(BaseFairseqModel):
             loss = F.smooth_l1_loss(
                 x.float(), y.float(), reduction="none", beta=self.loss_beta
             ).sum(dim=-1)
+        
+        if self.cfg.text_teacher:
+            if self.cfg.text_loss_beta == 0:
+                text_loss = F.mse_loss(text_x.float(), text_y.float(), reduction="none").sum(dim=-1)
+            else:
+                text_loss = F.smooth_l1_loss(
+                    text_x.float(), text_y.float(), reduction="none", beta=self.cfg.text_loss_beta
+                ).sum(dim=-1)
 
         if self.loss_scale is not None:
             scale = self.loss_scale
         else:
             scale = 1 / math.sqrt(sz)
+        
+        if self.cfg.text_teacher:
+            if self.cfg.text_loss_scale is not None:
+                text_scale = self.cfg.text_loss_scale
+            else:
+                text_scale = 1 / math.sqrt(sz)
 
-        result["losses"]["regression"] = loss.sum() * scale
+        result["losses"]["regression"] = loss.sum() * scale + text_loss.sum() * text_scale if self.cfg.text_teacher else loss.sum() * scale
 
         if "sample_size" not in result:
             result["sample_size"] = loss.numel()
@@ -491,6 +727,9 @@ class Data2VecAudioModel(BaseFairseqModel):
         with torch.no_grad():
             result["target_var"] = self.compute_var(y)
             result["pred_var"] = self.compute_var(x.float())
+            if self.cfg.text_teacher:
+                result["text_target_var"] = self.compute_var(text_y)
+                result["text_pred_var"] = self.compute_var(text_x.float())
 
         if self.num_updates > 5000 and result["target_var"] < self.cfg.min_target_var:
             logger.error(
@@ -509,6 +748,10 @@ class Data2VecAudioModel(BaseFairseqModel):
 
         if self.ema is not None:
             result["ema_decay"] = self.ema.get_decay() * 1000
+        
+        if self.cfg.text_teacher:
+            if self.text_ema is not None:
+                result["text_ema_decay"] = self.text_ema.get_decay() * 1000
 
         return result
 
@@ -548,3 +791,195 @@ class Data2VecAudioModel(BaseFairseqModel):
             self.encoder.layers = nn.ModuleList(
                 l for i, l in enumerate(self.encoder.layers) if i <= last_layer
             )
+
+
+class Data2VecTextEncoder(FairseqEncoder):
+    def __init__(self, cfg: Data2VecUniConfig, dictionary):
+        super().__init__(dictionary)
+
+        self.cfg = cfg
+        
+        embed_tokens = self.build_embedding(
+            len(dictionary), cfg.text_transformer.encoder.embed_dim, dictionary.pad()
+        )
+
+        self.sentence_encoder = self.build_encoder(cfg, dictionary, embed_tokens)
+        self.mask_idx = dictionary.index("<mask>")
+        assert self.mask_idx != dictionary.unk(), dictionary.symbols
+
+        self.ema = None
+        self.average_top_k_layers = cfg.text_average_top_k_layers
+        self.loss_scale = cfg.text_loss_scale
+
+        assert self.cfg.text_head_layers >= 1
+
+        embed_dim = cfg.text_transformer.encoder.embed_dim
+        curr_dim = embed_dim
+        projs = []
+        for i in range(self.cfg.text_head_layers - 1):
+            next_dim = embed_dim * 2 if i == 0 else curr_dim
+            projs.append(nn.Linear(curr_dim, next_dim))
+            projs.append(nn.GELU())
+            curr_dim = next_dim
+
+        projs.append(nn.Linear(curr_dim, embed_dim))
+        self.regression_head = nn.Sequential(*projs)
+
+        self.num_updates = 0
+
+    def build_embedding(self, vocab_size, embedding_dim, padding_idx):
+        return nn.Embedding(vocab_size, embedding_dim, padding_idx)
+
+    def build_encoder(self, cfg, dictionary, embed_tokens):
+        encoder = TextTransformerEncoder(cfg.text_transformer, dictionary, embed_tokens, return_fc=True)
+        encoder.apply(init_bert_params)
+        return encoder
+
+    def build_lm_head(self, embed_dim, output_dim, activation_fn, weight):
+        return RobertaLMHead(embed_dim, output_dim, activation_fn, weight)
+
+    def state_dict(self, destination=None, prefix="", keep_vars=False):
+        state = super().state_dict(destination, prefix, keep_vars)
+        if self.ema is not None:
+            state[prefix + "_ema"] = self.ema.fp32_params
+        return state
+
+    def _load_from_state_dict(self, state_dict, prefix, *args, **kwargs):
+        if self.ema is not None:
+            k = prefix + "_ema"
+            assert k in state_dict
+            self.ema.restore(state_dict[k], True)
+            del state_dict[k]
+        return super()._load_from_state_dict(state_dict, prefix, *args, **kwargs)
+
+    def forward(
+        self,
+        src_tokens,
+        target_tokens=None,
+        features_only=False,
+        return_all_hiddens=False,
+        masked_tokens=None,
+        **unused,
+    ):
+        """
+        Args:
+            src_tokens (LongTensor): input tokens of shape `(batch, src_len)`
+            features_only (bool, optional): skip LM head and just return
+                features. If True, the output will be of shape
+                `(batch, src_len, embed_dim)`.
+            return_all_hiddens (bool, optional): also return all of the
+                intermediate hidden states (default: False).
+
+        Returns:
+            tuple:
+                - the LM output of shape `(batch, src_len, vocab)`
+                - a dictionary of additional data, where 'inner_states'
+                  is a list of hidden states. Note that the hidden
+                  states have shape `(src_len, batch, vocab)`.
+        """
+
+        x, extra = self.extract_features(
+            src_tokens, return_all_hiddens=return_all_hiddens
+        )
+
+        if features_only:
+            return x, extra
+
+        assert target_tokens is not None
+
+        with torch.no_grad():
+            # use EMA parameter as the teacher
+            self.ema.model.eval()
+
+            encoder_out = self.ema.model(
+                target_tokens,
+                return_all_hiddens=True,
+            )
+            y = encoder_out["fc_results"]
+
+            y = y[-self.average_top_k_layers :]
+
+            permuted = False
+            if self.cfg.instance_norm_target_layer or self.cfg.batch_norm_target_layer:
+                y = [tl.permute(1, 2, 0) for tl in y]  # TBC -> BCT
+                permuted = True
+
+            if self.cfg.batch_norm_target_layer:
+                y = [
+                    F.batch_norm(
+                        tl.float(), running_mean=None, running_var=None, training=True
+                    )
+                    for tl in y
+                ]
+
+            if self.cfg.instance_norm_target_layer:
+                y = [F.instance_norm(tl.float()) for tl in y]
+
+            if permuted:
+                y = [tl.transpose(1, 2) for tl in y]  # BCT -> BTC
+
+            if self.cfg.layer_norm_target_layer:
+                y = [F.layer_norm(tl.float(), tl.shape[-1:]) for tl in y]
+
+            y = sum(y) / len(y)
+
+            if not permuted:
+                y = y.transpose(0, 1)
+
+            if self.cfg.layer_norm_targets:
+                y = F.layer_norm(y.float(), y.shape[-1:])
+
+            if self.cfg.instance_norm_targets:
+                y = F.instance_norm(y.transpose(1, 2)).transpose(1, 2)
+
+        masked_indices = src_tokens.eq(self.mask_idx)
+
+        x = x[masked_indices]
+        y = y[masked_indices]
+
+        x = self.regression_head(x)
+
+        sz = x.size(-1)
+        if self.cfg.loss_beta == 0:
+            loss = F.mse_loss(x.float(), y.float(), reduction="none").sum(dim=-1)
+        else:
+            loss = F.smooth_l1_loss(
+                x.float(), y.float(), reduction="none", beta=self.cfg.loss_beta
+            ).sum(dim=-1)
+
+        result = {
+            "losses": {
+                "main": loss.sum() / math.sqrt(sz)
+                if self.loss_scale <= 0
+                else loss.sum() * self.loss_scale,
+            },
+            "sample_size": loss.numel(),
+        }
+
+        # logging other values
+        other_logs = {
+            "ema_decay": self.ema.get_decay() * 1000
+        }
+        result["logs"] = other_logs
+        return result
+
+    def extract_features(self, src_tokens, return_all_hiddens=False, **kwargs):
+        encoder_out = self.sentence_encoder(
+            src_tokens,
+            return_all_hiddens=return_all_hiddens,
+            token_embeddings=kwargs.get("token_embeddings", None),
+        )
+        # T x B x C -> B x T x C
+        features = encoder_out["encoder_out"][0].transpose(0, 1)
+        inner_states = encoder_out["encoder_states"] if return_all_hiddens else None
+        return features, {
+            "inner_states": inner_states,
+            "encoder_embedding": encoder_out["encoder_embedding"][0],
+        }
+
+    def output_layer(self, features, masked_tokens=None, **unused):
+        return self.lm_head(features, masked_tokens)
+
+    def max_positions(self):
+        """Maximum output length supported by the encoder."""
+        return self.cfg.max_positions
