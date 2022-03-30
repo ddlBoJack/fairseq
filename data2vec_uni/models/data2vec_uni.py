@@ -217,7 +217,6 @@ class Data2VecUniModel(BaseFairseqModel):
         # for text model
         self.text_encoder = text_encoder
         self.text_ema = None
-        self.text_final_proj = nn.Linear(self.embed, self.embed) if self.text_encoder != None else None # v-ziyangma: p768 -> 768
 
 
     def make_ema_teacher(self):
@@ -283,7 +282,7 @@ class Data2VecUniModel(BaseFairseqModel):
             skip_keys=skip_keys,
         )
 
-        del self.text_encoder.sentence_encoder
+        # del self.text_encoder.sentence_encoder  #TODO: del the sentence_encoder to save memory
 
     def set_num_updates(self, num_updates):
         super().set_num_updates(num_updates)
@@ -329,10 +328,13 @@ class Data2VecUniModel(BaseFairseqModel):
         self.num_updates = num_updates
 
     def state_dict(self, destination=None, prefix="", keep_vars=False):
+        # using when save_checkpoint in `state_dict = utils.move_to_cpu(self.state_dict())` and `"model": self.model.state_dict()` in trainer.py
         state = super().state_dict(destination, prefix, keep_vars)
 
         if self.ema is not None:
             state[prefix + "_ema"] = self.ema.fp32_params
+        if self.text_ema is not None:
+            state[prefix + "_text_ema"] = self.text_ema.fp32_params
 
         return state
 
@@ -342,6 +344,12 @@ class Data2VecUniModel(BaseFairseqModel):
             assert k in state_dict
             self.ema.restore(state_dict[k], True)
             del state_dict[k]
+        if self.text_ema is not None:
+            k = prefix + "_text_ema"
+            assert k in state_dict
+            self.text_ema.restore(state_dict[k], True)
+            del state_dict[k]
+
         return super()._load_from_state_dict(state_dict, prefix, *args, **kwargs)
 
     @classmethod
@@ -675,12 +683,12 @@ class Data2VecUniModel(BaseFairseqModel):
                     sentence_upsampling = torch.cat(
                         [token_.repeat(meta_,1) for token_ ,meta_ in zip(sentence, sentence_meta)], dim=0
                     )
-                    if len(sentence_upsampling) < len(mask_indices[0]):
+                    if len(sentence_upsampling) < len(mask_indices[-1]):
                         sentence_upsampling = torch.cat(
-                            [sentence_upsampling, sentence_upsampling.new_zeros(len(mask_indices[0]) - len(sentence_upsampling), text_y.size(-1))], dim=0
+                            [sentence_upsampling, sentence_upsampling.new_zeros(len(mask_indices[-1]) - len(sentence_upsampling), text_y.size(-1))], dim=0
                         ).unsqueeze(0)
                     else:
-                        sentence_upsampling = sentence_upsampling[:len(mask_indices[0])].unsqueeze(0)
+                        sentence_upsampling = sentence_upsampling[:len(mask_indices[-1])].unsqueeze(0)
                     text_upsampling_list.append(sentence_upsampling)
                 text_upsampling = torch.cat(text_upsampling_list, dim=0)
                 assert (text_upsampling.size() == x.size()), f"text_upsampling.size() = {text_upsampling.size()} does not match x.size() = {x.size()}"
@@ -787,6 +795,7 @@ class Data2VecUniModel(BaseFairseqModel):
     def remove_pretraining_modules(self, last_layer=None):
         self.final_proj = None
         self.ema = None
+        self.text_ema = None
         if last_layer is not None:
             self.encoder.layers = nn.ModuleList(
                 l for i, l in enumerate(self.encoder.layers) if i <= last_layer
@@ -838,19 +847,19 @@ class Data2VecTextEncoder(FairseqEncoder):
     def build_lm_head(self, embed_dim, output_dim, activation_fn, weight):
         return RobertaLMHead(embed_dim, output_dim, activation_fn, weight)
 
-    def state_dict(self, destination=None, prefix="", keep_vars=False):
-        state = super().state_dict(destination, prefix, keep_vars)
-        if self.ema is not None:
-            state[prefix + "_ema"] = self.ema.fp32_params
-        return state
+    # def state_dict(self, destination=None, prefix="", keep_vars=False):
+    #     state = super().state_dict(destination, prefix, keep_vars)
+    #     if self.ema is not None:
+    #         state[prefix + "_ema"] = self.ema.fp32_params
+    #     return state
 
-    def _load_from_state_dict(self, state_dict, prefix, *args, **kwargs):
-        if self.ema is not None:
-            k = prefix + "_ema"
-            assert k in state_dict
-            self.ema.restore(state_dict[k], True)
-            del state_dict[k]
-        return super()._load_from_state_dict(state_dict, prefix, *args, **kwargs)
+    # def _load_from_state_dict(self, state_dict, prefix, *args, **kwargs):
+    #     if self.ema is not None:
+    #         k = prefix + "_ema"
+    #         assert k in state_dict
+    #         self.ema.restore(state_dict[k], True)
+    #         del state_dict[k]
+    #     return super()._load_from_state_dict(state_dict, prefix, *args, **kwargs)
 
     def forward(
         self,
