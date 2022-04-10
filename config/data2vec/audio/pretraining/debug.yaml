@@ -7,7 +7,7 @@ common:
   tensorboard_logdir: ???
 
 checkpoint:
-  save_interval_updates: 5000
+  save_interval_updates: 1
   keep_interval_updates: 1
   no_epoch_checkpoints: true
 
@@ -64,7 +64,7 @@ model:
   mask_prob: 0.65
   mask_length: 10
 
-  loss_beta: 0
+  loss_beta: 0.25
   loss_scale: null
 
   instance_norm_target_layer: true
@@ -77,7 +77,89 @@ model:
   ema_end_decay: 0.9999
   ema_anneal_end_step: 30000
   ema_transformer_only: true
-  ema_layers_only: true
+  ema_layers_only: false
 
   require_same_masks: true
   mask_dropout: 0
+  
+  ### reproduce  
+  # attend_masked_steps: true
+  # attend_masked_steps_starting: -1
+  # attention_layer_norm: false
+  # average_layers: true
+  # contrastive_average_top_k_layers: 0
+  # contrastive_layer_source: "END_OF_BLOCK"
+  # contrastive_loss_schedule: null
+  # contrastive_target_layer: -1
+  # conv_feature_no_norm_on_1d: true
+  # conv_pos_every_layer: false
+  # conv_pos_shared: false
+  # # diversity_weight: 0.1
+  # feature_mag_pen: false
+  # fixup_init: false
+  # instance_norm_pred: false
+  # l1_magnitude_penalty: false
+  # layer_result_source: "FC"
+  # magnitude_penalty: 0.0
+  # mask_anneal_end_step: 0
+  # max_magnitude_penalty: false
+  # new_post_proj: false
+  # next_target_layer: -1
+  # no_ema_after_updates: -1
+  # no_ln: false
+  # nomag_weight_norm: false
+  # non_uniform_weights_starting: 400000
+  # normalize: true
+  # p1_norm_target_layer: false
+  # p2_norm_target_layer: false
+  # post_proj_affine: true
+  # post_proj_depth: 1
+  # post_proj_gelu: false
+  # pretrained_final_proj: false
+  # pretrained_final_proj2: false
+  # pretrained_model_path: null
+  # proj_layers: 1
+  # proj_ln: false
+  # proj_transformer_layers: false
+  # quantize_targets: true
+  # reduce_corr_loss: false
+  # regressive_loss_schedule: null
+  # target_glu: false
+  # >         "separate_heads": false,
+  # >         "separate_var": false,
+  # >         "softmax_target_layer": false,
+  # >         "squeeze_avg": false,
+  # >         "squeeze_factor": 0,
+  # >         "stable_arch": false,
+  # >         "sync_var": false,
+  # >         "target_glu": false,
+  # >         "target_layer": 7,
+  # >         "target_layer_schedule": null,
+  # >         "target_linspace_from_uniform": true,
+  # >         "target_linspace_sharpen": 1.0,
+  # >         "target_loss_type": "L2",
+  # >         "target_masked_only": true,
+  # >         "target_network_path": "",
+  # >         "transformer_feature_pen": false,
+  # >         "transformer_layer_type": "TRANSFORMER",
+  # >         "var_batch_margin": 0.5,
+  # >         "var_batch_weight": 0.0,
+  # >         "var_fc2s": false,
+  # >         "var_fc2s_layer": -1,
+  # >         "var_fc2s_stacked": false,
+  # >         "var_float": false,
+  # >         "var_global_margin": 0.25,
+  # >         "var_global_weight": 0.0,
+  # >         "var_global_weight_schedule": null,
+  # >         "var_margin": 0.5,
+  # >         "var_masked_global_margin": 0.35,
+  # >         "var_masked_global_weight": 0.0,
+  # >         "var_masked_global_weight_schedule": null,
+  # >         "var_over_time": false,
+  # >         "var_projector_masked_global_margin": 0.35,
+  # >         "var_projector_masked_global_weight": 0.0,
+  # >         "var_time_margin": 0.1,
+  # >         "var_time_weight": 0.0,
+  # >         "var_weight": 0.0,
+  # >         "var_xs": [],
+  # >         "weight_norm": false

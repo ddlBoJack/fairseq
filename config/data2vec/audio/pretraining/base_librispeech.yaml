@@ -25,7 +25,7 @@ dataset:
   skip_invalid_size_inputs_valid_test: true
   validate_interval: 5
   required_batch_size_multiple: 1
-  disable_validation: false
+  disable_validation: true
 
 distributed_training:
   distributed_world_size: 16

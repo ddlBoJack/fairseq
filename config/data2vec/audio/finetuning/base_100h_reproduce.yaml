@@ -3,11 +3,9 @@
 common:
   fp16: true
   log_format: json
-  log_interval: 1
+  log_interval: 200
 
 checkpoint:
-  save_interval_updates: 10
-  keep_interval_updates: 1
   no_epoch_checkpoints: true
   best_checkpoint_metric: wer
 
@@ -18,16 +16,14 @@ task:
   labels: ltr
 
 dataset:
-  num_workers: 1
-  max_tokens: 1600000
+  num_workers: 6
+  max_tokens: 3200000
   skip_invalid_size_inputs_valid_test: true
-  validate_after_updates: 10
-  validate_interval_updates: 10
   valid_subset: dev_other
 
 distributed_training:
-  ddp_backend: legacy_ddp
-  distributed_world_size: 1
+  ddp_backend: no_c10d
+  distributed_world_size: 2
 
 criterion:
   _name: ctc
@@ -35,9 +31,9 @@ criterion:
 
 optimization:
   max_update: 80000
-  lr: [0.00003]
+  lr: [0.00002]
   sentence_avg: true
-  update_freq: [2]
+  update_freq: [4]
 
 optimizer:
   _name: adam
@@ -50,7 +46,7 @@ lr_scheduler:
   final_lr_scale: 0.05
 
 model:
-  _name: data2vec_uni_ctc
+  _name: wav2vec_ctc
   w2v_path: ???
   apply_mask: true
   mask_prob: 0.65
@@ -59,4 +55,4 @@ model:
   layerdrop: 0.1
   activation_dropout: 0.1
   feature_grad_mult: 0.0
-  freeze_finetune_updates: 0
+  freeze_finetune_updates: 100

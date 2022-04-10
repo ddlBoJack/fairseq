@@ -20,7 +20,7 @@ from fairseq.dataclass import FairseqDataclass, ChoiceEnum
 from fairseq.data.text_compressor import TextCompressor, TextCompressionLevel
 
 from fairseq.tasks import FairseqTask, register_task
-from ..data import UniDataset
+from ..data import UniDataset, MultitaskDataset
 
 
 logger = logging.getLogger(__name__)
@@ -121,6 +121,11 @@ class UniPretrainingConfig(FairseqDataclass):
         },
     )
 
+    speech_data: Optional[str] = field(
+        default=None,
+        metadata={"help": "path to speech data without alignment pairs"},
+    )
+
 
 @register_task("data2vec_uni_pretraining", dataclass=UniPretrainingConfig)
 class UniPretrainingTask(FairseqTask):
@@ -183,7 +188,7 @@ class UniPretrainingTask(FairseqTask):
 
         manifest_path = os.path.join(data_path, "{}.tsv".format(split))
         logger.info(f"loading {split} manifest from {manifest_path}")
-        self.datasets[split] = FileAudioDataset(
+        speech_data_uni = FileAudioDataset(
             manifest_path=manifest_path,
             sample_rate=task_cfg.get("sample_rate", self.cfg.sample_rate),
             max_sample_size=self.cfg.max_sample_size,
@@ -198,7 +203,7 @@ class UniPretrainingTask(FairseqTask):
 
         label_path = os.path.join(data_path, f"{split}.{task_cfg.labels}")
         logger.info(f"loading {split} labels from {label_path}")
-        skipped_indices = getattr(self.datasets[split], "skipped_indices", set())
+        skipped_indices = getattr(speech_data_uni, "skipped_indices", set())
         text_compressor = TextCompressor(level=text_compression_level)
         with open(label_path, "r") as f:
             labels = [
@@ -206,9 +211,9 @@ class UniPretrainingTask(FairseqTask):
                 for i, l in enumerate(f)
                 if i not in skipped_indices
             ]
-        assert len(labels) == len(self.datasets[split]), (
+        assert len(labels) == len(speech_data_uni), (
             f"labels length ({len(labels)}) and dataset length "
-            f"({len(self.datasets[split])}) do not match"
+            f"({len(speech_data_uni)}) do not match"
         )
         process_label = LabelEncoder(self.target_dictionary)
 
@@ -225,13 +230,13 @@ class UniPretrainingTask(FairseqTask):
         meta = [
             [int(num) for num in line] for line in meta
         ]
-        assert len(meta) == len(self.datasets[split]), (
+        assert len(meta) == len(speech_data_uni), (
             f"meta length ({len(meta)}) and dataset length "
-            f"({len(self.datasets[split])}) do not match"
+            f"({len(speech_data_uni)}) do not match"
         )
 
-        self.datasets[split] = UniDataset(
-            self.datasets[split],
+        data_uni = UniDataset(
+            speech_data_uni,
             labels,
             meta,
             pad=self.target_dictionary.pad(),
@@ -242,6 +247,30 @@ class UniPretrainingTask(FairseqTask):
             add_to_input=task_cfg.get("autoregressive", False),
             text_compression_level=text_compression_level,
         )
+        datasets=[]
+        datasets.append(data_uni)
+
+        speech_data_path = os.path.join(data_path, "{}.tsv".format(task_cfg.speech_data))
+        logger.info(f"loading {task_cfg.speech_data} manifest from {speech_data_path}")
+        speech_data = FileAudioDataset(
+            manifest_path=speech_data_path,
+            sample_rate=task_cfg.get("sample_rate", self.cfg.sample_rate),
+            max_sample_size=self.cfg.max_sample_size,
+            min_sample_size=self.cfg.min_sample_size,
+            pad=task_cfg.labels is not None or task_cfg.enable_padding,
+            normalize=task_cfg.normalize,
+            num_buckets=self.cfg.num_batch_buckets or int(self.cfg.tpu),
+            compute_mask_indices=(self.cfg.precompute_mask_indices or self.cfg.tpu),
+            text_compression_level=text_compression_level,
+            **self._get_mask_precompute_kwargs(task_cfg),
+        )
+        datasets.append(speech_data)
+
+        self.datasets[split] = MultitaskDataset(
+                datasets=datasets
+            )
+
+
 
         if self.cfg.tpu and task_cfg.inferred_w2v_config.mask_channel_prob == 0.0:
             logger.info(

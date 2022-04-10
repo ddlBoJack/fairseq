@@ -474,11 +474,11 @@ class Data2VecUniModel(BaseFairseqModel):
     def forward(
         self,
         source,
-        target,
-        meta,
-        target_lengths,
-        ntokens,
         padding_mask=None,
+        target=None,
+        meta=None,
+        target_lengths=None,
+        ntokens=None,
         mask=True,
         features_only=False,
         layer=None,
@@ -486,6 +486,8 @@ class Data2VecUniModel(BaseFairseqModel):
         mask_channel_indices=None,
         padding_count=None,
     ):
+        text_teacher = False if target == None else self.cfg.text_teacher # deside whether to use text teacher by the input tpye
+
         features = source # v-ziyangma: batch_size x seq_len
 
         if self.feature_grad_mult > 0:
@@ -635,7 +637,7 @@ class Data2VecUniModel(BaseFairseqModel):
 
 
             # below are for text teacher model
-            if self.cfg.text_teacher: 
+            if text_teacher: 
                 self.text_ema.model.eval()
                 text_encoder_out = self.text_ema.model(
                     target,
@@ -697,7 +699,7 @@ class Data2VecUniModel(BaseFairseqModel):
         # compute loss
         x = x[mask_indices]
         x = self.final_proj(x)
-        text_x = self.text_encoder.regression_head(x) if self.cfg.text_teacher else None
+        text_x = self.text_encoder.regression_head(x) if text_teacher else None
 
         sz = x.size(-1)
 
@@ -708,7 +710,7 @@ class Data2VecUniModel(BaseFairseqModel):
                 x.float(), y.float(), reduction="none", beta=self.loss_beta
             ).sum(dim=-1)
         
-        if self.cfg.text_teacher:
+        if text_teacher:
             if self.cfg.text_loss_beta == 0:
                 text_loss = F.mse_loss(text_x.float(), text_y.float(), reduction="none").sum(dim=-1)
             else:
@@ -721,13 +723,13 @@ class Data2VecUniModel(BaseFairseqModel):
         else:
             scale = 1 / math.sqrt(sz)
         
-        if self.cfg.text_teacher:
+        if text_teacher:
             if self.cfg.text_loss_scale is not None:
                 text_scale = self.cfg.text_loss_scale
             else:
                 text_scale = 1 / math.sqrt(sz)
 
-        result["losses"]["regression"] = loss.sum() * scale + text_loss.sum() * text_scale if self.cfg.text_teacher else loss.sum() * scale
+        result["losses"]["regression"] = loss.sum() * scale + text_loss.sum() * text_scale if text_teacher else loss.sum() * scale
 
         if "sample_size" not in result:
             result["sample_size"] = loss.numel()
@@ -735,7 +737,7 @@ class Data2VecUniModel(BaseFairseqModel):
         with torch.no_grad():
             result["target_var"] = self.compute_var(y)
             result["pred_var"] = self.compute_var(x.float())
-            if self.cfg.text_teacher:
+            if text_teacher:
                 result["text_target_var"] = self.compute_var(text_y)
                 result["text_pred_var"] = self.compute_var(text_x.float())
 
@@ -757,7 +759,7 @@ class Data2VecUniModel(BaseFairseqModel):
         if self.ema is not None:
             result["ema_decay"] = self.ema.get_decay() * 1000
         
-        if self.cfg.text_teacher:
+        if text_teacher:
             if self.text_ema is not None:
                 result["text_ema_decay"] = self.text_ema.get_decay() * 1000
 

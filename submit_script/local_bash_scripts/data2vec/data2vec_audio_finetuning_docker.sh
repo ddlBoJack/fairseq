@@ -1,22 +1,22 @@
 #!/bin/bash
-export PYTHONPATH=~/github/fairseq:$PYTHONPATH
-cd ~/github/fairseq
+export PYTHONPATH=/datablob/users/v-ziyangma/github/fairseq:$PYTHONPATH
+cd /datablob/users/v-ziyangma/github/fairseq
 
 # edit your exp
 model_name=data2vec
 exp_name=data2vec_debug_finetuning
 
 #edit your config
-config_dir=~/github/fairseq/config/data2vec/audio/finetuning
+config_dir=/datablob/users/v-ziyangma/github/fairseq/config/data2vec/audio/finetuning
 config_name=debug
 
 #edit your data
-data_path=~/data/LibriSpeech/manifest/resource/
+data_path=/datablob/users/v-ziyangma/data/LibriSpeech/manifest/resource/
 train_subset=test_clean
 valid_subset=test_clean
 
 #edit your pretrained model
-model_path=/home/v-ziyangma/model/data2vec/data2vec_debug/checkpoint_last.pt
+model_path=/datablob/users/v-ziyangma/model/data2vec/data2vec_debug/checkpoint_last.pt
 
 #edit your log
 # tb_path=~/log/${model_name}/${exp_name}/tensorboard
@@ -24,7 +24,7 @@ model_path=/home/v-ziyangma/model/data2vec/data2vec_debug/checkpoint_last.pt
 # log_file=~/log/${model_name}/${exp_name}/hydra_train.log
 
 # set finetune output model
-finetuning_output_dir=~/log/${model_name}/${exp_name}/${train_subset}_${valid_subset}
+finetuning_output_dir=/datablob/users/v-ziyangma/log/${model_name}/${exp_name}/${train_subset}_${valid_subset}
 # mkdir -p ${finetuning_output_dir}
 
 echo "Start finetuning!!!"

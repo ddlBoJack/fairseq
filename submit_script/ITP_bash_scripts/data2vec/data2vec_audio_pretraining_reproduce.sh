@@ -1,19 +1,20 @@
 #!/bin/bash
 set -x
+pip list
 
 # edit your exp
 prefix_dir=/datablob/users/v-ziyangma
 model_name=data2vec
-exp_name=data2vec_960h_devclean
+exp_name=data2vec_960h_repreduce
 
 #edit your config
 config_dir=./config/data2vec/audio/pretraining
-config_name=base_librispeech
+config_name=reproduce
 
 #edit your data
 data_path=${prefix_dir}/data/manifest/debug/
 train_subset=train_960
-valid_subset=dev_clean
+valid_subset=dev_other
 
 # edit your compute resource
 distributed_world_size=16
@@ -33,7 +34,7 @@ echo "Start training!!!"
 echo -e '\n'
 # pretrain
 # python -m debugpy --listen 5678 --wait-for-client fairseq_cli/hydra_train.py  \
-~/miniconda/bin/python fairseq_cli/hydra_train.py  \
+python fairseq_cli/hydra_train.py  \
 --config-dir ${config_dir}  \
 --config-name ${config_name}  \
 task.data=${data_path}  \

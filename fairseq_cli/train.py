@@ -72,6 +72,7 @@ def main(cfg: FairseqConfig) -> None:
 
     # Print args
     logger.info(cfg)
+    # OmegaConf.save(config=cfg, f="current_config.yaml")
 
     if cfg.checkpoint.write_checkpoints_asynchronously:
         try:

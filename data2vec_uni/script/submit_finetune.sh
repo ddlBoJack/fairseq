@@ -3,33 +3,36 @@ set -x
 
 # edit your exp
 prefix_dir=/datablob/users/v-ziyangma
-model_name=data2vec
-exp_name=data2vec_960h_devclean
+model_name=data2vec_uni
+exp_name=data2vec_uni_100h_testfinetuning_output
 
 #edit your config
-config_dir=./config/data2vec/audio/pretraining
-config_name=base_librispeech
+config_dir=./config/data2vec/audio/finetuning
+config_name=base_100h
 
 #edit your data
-data_path=${prefix_dir}/data/manifest/debug/
-train_subset=train_960
-valid_subset=dev_clean
+data_path=${prefix_dir}/data/manifest/finetuning/
+train_subset=train_clean_100
+valid_subset=dev_other
 
 # edit your compute resource
-distributed_world_size=16
+distributed_world_size=8
 update_freq=[1]
-max_tokens=3800000
+max_tokens=3200000
 
-#edit your ckpt
-model_path=${prefix_dir}/model/${model_name}/${exp_name}
-mkdir -p ${model_path}
+#edit your pretrained model
+model_path=${prefix_dir}/model/${model_name}/data2vec_uni_100h_testfinetuning/checkpoint_best.pt
 
 #edit your log: !!too slow to write to datablob!!
 # tb_path=${prefix_dir}/log/${model_name}/${exp_name}/tensorboard
 # mkdir -p ${tb_path}
 # log_file=${prefix_dir}/log/${model_name}/${exp_name}/hydra_train.log
 
-echo "Start training!!!"
+# set finetune output model
+finetuning_output_dir=${prefix_dir}/model/${model_name}/${exp_name}/${train_subset}_${valid_subset}
+# mkdir -p ${finetuning_output_dir}
+
+echo "Start finetuning!!!"
 echo -e '\n'
 # pretrain
 # python -m debugpy --listen 5678 --wait-for-client fairseq_cli/hydra_train.py  \
@@ -39,10 +42,13 @@ echo -e '\n'
 task.data=${data_path}  \
 dataset.train_subset=${train_subset}  \
 dataset.valid_subset=${valid_subset}  \
-checkpoint.save_dir=${model_path}  \
+model.w2v_path=${model_path} \
+hydra.run.dir=${finetuning_output_dir} \
 distributed_training.distributed_world_size=${distributed_world_size}  \
 optimization.update_freq=${update_freq} \
-dataset.max_tokens=${max_tokens}
+dataset.max_tokens=${max_tokens}  \
+task.normalize=true \
+common.user_dir=data2vec_uni
 # common.tensorboard_logdir=${tb_path} \
 # common.log_file=${log_file}  \
 
