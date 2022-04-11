@@ -19,6 +19,7 @@ task:
   min_sample_size: 32000
   normalize: true
   labels: phn
+  speech_data: train_860
 
 dataset:
   num_workers: 6
@@ -26,11 +27,11 @@ dataset:
   skip_invalid_size_inputs_valid_test: true
   validate_interval: 5
   required_batch_size_multiple: 1
-  disable_validation: false
+  disable_validation: true
 
 distributed_training:
   distributed_world_size: 16
-  ddp_backend: legacy_ddp
+  ddp_backend: no_c10d
 
 criterion:
   _name: model
@@ -86,6 +87,9 @@ model:
 
   require_same_masks: true
   mask_dropout: 0
+
+  speech_pretrained_model: True
+  speech_model_path: ???
 
   ########## below are for text teacher ##########
   text_model_path: ???

@@ -89,6 +89,14 @@ class Data2VecUniConfig(Wav2Vec2Config):
         metadata={"help": "stop training if prediction var falls below this"},
     )
 
+    speech_pretrained_model: bool = field(
+    default=False, 
+    metadata={"help": "whether to use pretrained speech model"}
+    )
+    speech_model_path: Optional[str] = field(
+        default=None, metadata={"help": "path to pretrained speech model"}
+    )
+
     ########## below are for text teacher ##########
     text_model_path: Optional[str] = field(
         default=None, metadata={"help": "path to pretrained text model"}
@@ -217,6 +225,12 @@ class Data2VecUniModel(BaseFairseqModel):
         # for text model
         self.text_encoder = text_encoder
         self.text_ema = None
+
+        # load pretrained speech model if specified
+        if cfg.speech_pretrained_model:
+            logger.info(f"loading pretrained speech model from {cfg.speech_model_path} ...")
+            state_dict=torch.load(cfg.speech_model_path)
+            self.load_state_dict(state_dict["model"], strict=False)
 
 
     def make_ema_teacher(self):
@@ -360,18 +374,18 @@ class Data2VecUniModel(BaseFairseqModel):
             if cfg.text_model_path is not None:
                 text_encoder = Data2VecTextEncoder(cfg, task.target_dictionary)
             
-            pretrained_model = torch.load(cfg.text_model_path)
+            pretrained_text_model = torch.load(cfg.text_model_path)
             state_dict = text_encoder.state_dict()
             text_model_key = [name for name in text_encoder.state_dict()]
             logger.info(f"loading text model from {cfg.text_model_path} ...")
             if cfg.text_init_transformer:
                 pass # TODO: init the embed_tokens.weight and embed_positions.weight from the pretrained model.
             else:
-                for key in pretrained_model["model"].keys():
+                for key in pretrained_text_model["model"].keys():
                     local_key = ".".join(key.split(".")[1:])
                     if local_key in state_dict:
                         # logger.info(f"loading {local_key} from {key} in {cfg.text_model_path}")
-                        state_dict[local_key].copy_(pretrained_model["model"][key])
+                        state_dict[local_key].copy_(pretrained_text_model["model"][key])
                         text_model_key.remove(local_key)
                     else:
                         logger.info(f"skipping key: {key} in {cfg.text_model_path}")

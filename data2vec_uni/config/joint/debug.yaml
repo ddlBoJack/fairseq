@@ -86,6 +86,9 @@ model:
   require_same_masks: true
   mask_dropout: 0
 
+  speech_pretrained_model: True
+  speech_model_path: /home/v-ziyangma/model/data2vec/download_pretrained/audio_base_ls.pt
+  
   ########## below are for text teacher ##########
   text_model_path: /home/v-ziyangma/model/roberta/roberta_phone_pretrain/checkpoint_best.pt
   text_max_positions: 512
