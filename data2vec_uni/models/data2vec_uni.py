@@ -751,9 +751,6 @@ class Data2VecUniModel(BaseFairseqModel):
         with torch.no_grad():
             result["target_var"] = self.compute_var(y)
             result["pred_var"] = self.compute_var(x.float())
-            if text_teacher:
-                result["text_target_var"] = self.compute_var(text_y)
-                result["text_pred_var"] = self.compute_var(text_x.float())
 
         if self.num_updates > 5000 and result["target_var"] < self.cfg.min_target_var:
             logger.error(

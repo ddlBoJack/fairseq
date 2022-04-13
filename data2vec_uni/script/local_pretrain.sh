@@ -17,8 +17,8 @@ valid_subset=dev_clean
 speech_data=train_860
 
 # edit your compute resource
-distributed_world_size=1
-update_freq=[2]
+distributed_world_size=3
+update_freq=[4]
 max_tokens=1000000
 
 # edit your ckpt
@@ -36,7 +36,7 @@ log_file=~/log/${model_name}/${exp_name}/hydra_train.log
 # set finetune output model
 # finetuning_output_dir=~/log/${model_name}/${exp_name}/${train_subset}_${valid_subset}
 
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=1,2,3
 
 echo "Start pretraining!!!"
 echo -e '\n'
