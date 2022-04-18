@@ -379,7 +379,7 @@ class Data2VecUniModel(BaseFairseqModel):
             text_model_key = [name for name in text_encoder.state_dict()]
             logger.info(f"loading text model from {cfg.text_model_path} ...")
             if cfg.text_init_transformer:
-                pass # TODO: init the embed_tokens.weight and embed_positions.weight from the pretrained model.
+                pass # TODO: only init the embed_tokens.weight and embed_positions.weight from the pretrained model.
             else:
                 for key in pretrained_text_model["model"].keys():
                     local_key = ".".join(key.split(".")[1:])

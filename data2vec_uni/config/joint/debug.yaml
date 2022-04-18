@@ -4,7 +4,7 @@ common:
   fp16: true
   log_format: json
   log_interval: 1
-  tensorboard_logdir: ???
+  tensorboard_logdir: tb
 
 checkpoint:
   save_interval_updates: 10
@@ -18,7 +18,7 @@ task:
   min_sample_size: 32000
   normalize: true
   labels: phn
-  speech_data: train_860
+  speech_data: train_860 # set "None" to disable speech data
 
 dataset:
   num_workers: 1
@@ -30,7 +30,7 @@ dataset:
 
 distributed_training:
   distributed_world_size: 1
-  ddp_backend: legacy_ddp
+  ddp_backend: no_c10d
 
 criterion:
   _name: model
@@ -87,10 +87,10 @@ model:
   mask_dropout: 0
 
   speech_pretrained_model: true
-  speech_model_path: /home/v-ziyangma/model/data2vec/download_pretrained/audio_base_ls.pt
+  speech_model_path: ???
   
   ########## below are for text teacher ##########
-  text_model_path: /home/v-ziyangma/model/roberta/roberta_phone_pretrain/checkpoint_best.pt
+  text_model_path: ???
   text_max_positions: 512
 
   text_head_layers: 2

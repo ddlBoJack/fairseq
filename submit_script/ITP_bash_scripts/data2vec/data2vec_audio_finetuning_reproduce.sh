@@ -5,7 +5,7 @@ pip list
 # edit your exp
 prefix_dir=/datablob/users/v-ziyangma
 model_name=data2vec
-exp_name=data2vec_960h_repreduce_oldpretrain_newfinetune
+exp_name=data2vec_960h_repreduce_newpretrain_newfinetune
 
 #edit your config
 config_dir=./config/data2vec/audio/finetuning
@@ -22,7 +22,7 @@ update_freq=[1]
 max_tokens=3200000
 
 #edit your pretrained model
-model_path=${prefix_dir}/model/${model_name}/data2vec_960h_devclean/checkpoint_best.pt
+model_path=${prefix_dir}/model/${model_name}/data2vec_960h_repreduce/checkpoint_last.pt
 
 #edit your log: !!too slow to write to datablob!!
 # tb_path=${prefix_dir}/log/${model_name}/${exp_name}/tensorboard

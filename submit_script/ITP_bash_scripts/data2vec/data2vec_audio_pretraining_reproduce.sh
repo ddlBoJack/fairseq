@@ -1,11 +1,10 @@
 #!/bin/bash
 set -x
-pip list
 
 # edit your exp
 prefix_dir=/datablob/users/v-ziyangma
 model_name=data2vec
-exp_name=data2vec_960h_repreduce
+exp_name=data2vec_960h_repreduce_G8
 
 #edit your config
 config_dir=./config/data2vec/audio/pretraining
@@ -17,8 +16,8 @@ train_subset=train_960
 valid_subset=dev_other
 
 # edit your compute resource
-distributed_world_size=16
-update_freq=[1]
+distributed_world_size=8
+update_freq=[2]
 max_tokens=3800000
 
 #edit your ckpt

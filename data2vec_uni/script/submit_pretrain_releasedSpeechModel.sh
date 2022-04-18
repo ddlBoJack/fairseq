@@ -17,8 +17,8 @@ valid_subset=dev_clean
 speech_data=train_860
 
 # edit your compute resource
-distributed_world_size=16
-update_freq=[2]
+distributed_world_size=8
+update_freq=[4]
 max_tokens=1900000
 
 #edit your ckpt

@@ -250,21 +250,22 @@ class UniPretrainingTask(FairseqTask):
         datasets=[]
         datasets.append(data_uni)
 
-        speech_data_path = os.path.join(data_path, "{}.tsv".format(task_cfg.speech_data))
-        logger.info(f"loading {task_cfg.speech_data} manifest from {speech_data_path}")
-        speech_data = FileAudioDataset(
-            manifest_path=speech_data_path,
-            sample_rate=task_cfg.get("sample_rate", self.cfg.sample_rate),
-            max_sample_size=self.cfg.max_sample_size,
-            min_sample_size=self.cfg.min_sample_size,
-            pad=task_cfg.labels is not None or task_cfg.enable_padding,
-            normalize=task_cfg.normalize,
-            num_buckets=self.cfg.num_batch_buckets or int(self.cfg.tpu),
-            compute_mask_indices=(self.cfg.precompute_mask_indices or self.cfg.tpu),
-            text_compression_level=text_compression_level,
-            **self._get_mask_precompute_kwargs(task_cfg),
-        )
-        datasets.append(speech_data)
+        if task_cfg.speech_data != "None":
+            speech_data_path = os.path.join(data_path, "{}.tsv".format(task_cfg.speech_data))
+            logger.info(f"loading {task_cfg.speech_data} manifest from {speech_data_path}")
+            speech_data = FileAudioDataset(
+                manifest_path=speech_data_path,
+                sample_rate=task_cfg.get("sample_rate", self.cfg.sample_rate),
+                max_sample_size=self.cfg.max_sample_size,
+                min_sample_size=self.cfg.min_sample_size,
+                pad=task_cfg.labels is not None or task_cfg.enable_padding,
+                normalize=task_cfg.normalize,
+                num_buckets=self.cfg.num_batch_buckets or int(self.cfg.tpu),
+                compute_mask_indices=(self.cfg.precompute_mask_indices or self.cfg.tpu),
+                text_compression_level=text_compression_level,
+                **self._get_mask_precompute_kwargs(task_cfg),
+            )
+            datasets.append(speech_data)
 
         self.datasets[split] = MultitaskDataset(
                 datasets=datasets

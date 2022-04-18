@@ -88,7 +88,7 @@ model:
   require_same_masks: true
   mask_dropout: 0
 
-  speech_pretrained_model: True
+  speech_pretrained_model: true
   speech_model_path: ???
 
   ########## below are for text teacher ##########
