@@ -309,6 +309,7 @@ class Wav2VecEncoder(FairseqEncoder):
         task = tasks.setup_task(w2v_args.task)
         w2v_args.model.text_teacher = False
         w2v_args.model.text_do_ema = False
+        w2v_args.model.speech_pretrained_model = False
         model = task.build_model(w2v_args.model, from_checkpoint=True)
 
         model.remove_pretraining_modules()

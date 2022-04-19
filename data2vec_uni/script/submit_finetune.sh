@@ -7,7 +7,7 @@ model_name=data2vec_uni
 exp_name=data2vec_uni_100h_testfinetuning_output
 
 #edit your config
-config_dir=./config/data2vec/audio/finetuning
+config_dir=./data2vec_uni/config/joint
 config_name=base_100h
 
 #edit your data
@@ -32,11 +32,14 @@ model_path=${prefix_dir}/model/${model_name}/data2vec_uni_100h_testfinetuning/ch
 finetuning_output_dir=${prefix_dir}/model/${model_name}/${exp_name}/${train_subset}_${valid_subset}
 # mkdir -p ${finetuning_output_dir}
 
+kenlm_model_path=${prefix_dir}/model/language_model/4-gram.bin
+lexicon_path=${prefix_dir}/model/language_model/librispeech_lexicon.lst
+
 echo "Start finetuning!!!"
 echo -e '\n'
 # pretrain
 # python -m debugpy --listen 5678 --wait-for-client fairseq_cli/hydra_train.py  \
-~/miniconda/bin/python fairseq_cli/hydra_train.py  \
+python fairseq_cli/hydra_train.py  \
 --config-dir ${config_dir}  \
 --config-name ${config_name}  \
 task.data=${data_path}  \
@@ -48,14 +51,13 @@ distributed_training.distributed_world_size=${distributed_world_size}  \
 optimization.update_freq=${update_freq} \
 dataset.max_tokens=${max_tokens}  \
 task.normalize=true \
++criterion.wer_kenlm_model=${kenlm_model_path}  \
++criterion.wer_lexicon=${lexicon_path}  \
++criterion.wer_lm_weight=2 \
++criterion.wer_word_score=-1 \
 common.user_dir=data2vec_uni
 # common.tensorboard_logdir=${tb_path} \
 # common.log_file=${log_file}  \
-
-cp -r /tmp/code/outputs/ ${prefix_dir}/log/${model_name}/${exp_name}/
-
-# finetune
-#TODO: add finetune
 
 # open http://localhost:6006/ to see the tensorboard
 # tensorboard --logdir ${tb_path} 
