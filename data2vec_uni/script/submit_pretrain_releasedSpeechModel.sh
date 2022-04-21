@@ -84,3 +84,5 @@ cp -r /tmp/code/outputs/ ${prefix_dir}/log/${model_name}/${exp_name}/
 
 echo -e '\n'
 echo "finshed!"
+
+. ./submit_script/debug/hold_sleep.sh

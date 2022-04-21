@@ -19,7 +19,7 @@ task:
   min_sample_size: 32000
   normalize: true
   labels: phn
-  speech_data: train_860
+  speech_data: train_860 # set "None" to disable speech data
 
 dataset:
   num_workers: 6
@@ -37,11 +37,13 @@ criterion:
   _name: model
   log_keys:
     - ema_decay
-    - text_ema_decay
     - target_var
     - pred_var
-    - text_target_var
-    - text_pred_var
+    - speech_loss
+    - text_loss
+    # - text_ema_decay
+    # - text_target_var
+    # - text_pred_var
 
 optimization:
   max_update: 400000
@@ -92,6 +94,7 @@ model:
   speech_model_path: ???
 
   ########## below are for text teacher ##########
+  text_pretrained_model: true
   text_model_path: ???
   text_max_positions: 512
 

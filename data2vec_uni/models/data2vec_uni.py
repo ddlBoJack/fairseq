@@ -98,6 +98,10 @@ class Data2VecUniConfig(Wav2Vec2Config):
     )
 
     ########## below are for text teacher ##########
+    text_pretrained_model: bool = field(
+    default=False, 
+    metadata={"help": "whether to use pretrained text model"}
+    )
     text_model_path: Optional[str] = field(
         default=None, metadata={"help": "path to pretrained text model"}
     )
@@ -156,6 +160,10 @@ class Data2VecUniConfig(Wav2Vec2Config):
     text_do_ema: bool = field(
         default=True, 
         metadata={"help": "whether to use ema"}
+        )
+    text_loss_alpha: float = field(
+        default=1, 
+        metadata={"help": "coefficient for text_loss"}
         )
 
 
@@ -320,11 +328,11 @@ class Data2VecUniModel(BaseFairseqModel):
                 self.ema.step(self.encoder if self.cfg.ema_transformer_only else self)
         
 
-        if self.cfg.text_teacher and self.cfg.text_do_ema:
+        if self.cfg.text_teacher:
             if self.text_ema is None and self.text_encoder.regression_head is not None:
                 logger.info(f"making text ema teacher")
                 self.make_text_ema_teacher()
-            elif self.training and self.ema is not None:
+            elif self.training and self.text_ema is not None and self.cfg.text_do_ema:
                 if self.cfg.text_ema_decay != self.cfg.text_ema_end_decay:
                     if num_updates >= self.cfg.text_ema_anneal_end_step:
                         text_decay = self.cfg.text_ema_end_decay
@@ -374,23 +382,24 @@ class Data2VecUniModel(BaseFairseqModel):
             if cfg.text_model_path is not None:
                 text_encoder = Data2VecTextEncoder(cfg, task.target_dictionary)
             
-            pretrained_text_model = torch.load(cfg.text_model_path)
-            state_dict = text_encoder.state_dict()
-            text_model_key = [name for name in text_encoder.state_dict()]
-            logger.info(f"loading text model from {cfg.text_model_path} ...")
-            if cfg.text_init_transformer:
-                pass # TODO: only init the embed_tokens.weight and embed_positions.weight from the pretrained model.
-            else:
-                for key in pretrained_text_model["model"].keys():
-                    local_key = ".".join(key.split(".")[1:])
-                    if local_key in state_dict:
-                        # logger.info(f"loading {local_key} from {key} in {cfg.text_model_path}")
-                        state_dict[local_key].copy_(pretrained_text_model["model"][key])
-                        text_model_key.remove(local_key)
-                    else:
-                        logger.info(f"skipping key: {key} in {cfg.text_model_path}")
-                for key in text_model_key:
-                    logger.info(f"initializing key: {key} in {text_encoder.__class__.__name__}")
+            if cfg.text_pretrained_model:
+                pretrained_text_model = torch.load(cfg.text_model_path)
+                state_dict = text_encoder.state_dict()
+                text_model_key = [name for name in text_encoder.state_dict()]
+                logger.info(f"loading text model from {cfg.text_model_path} ...")
+                if cfg.text_init_transformer:
+                    pass # TODO: only init the embed_tokens.weight and embed_positions.weight from the pretrained model.
+                else:
+                    for key in pretrained_text_model["model"].keys():
+                        local_key = ".".join(key.split(".")[1:])
+                        if local_key in state_dict:
+                            # logger.info(f"loading {local_key} from {key} in {cfg.text_model_path}")
+                            state_dict[local_key].copy_(pretrained_text_model["model"][key])
+                            text_model_key.remove(local_key)
+                        else:
+                            logger.info(f"skipping key: {key} in {cfg.text_model_path}")
+                    for key in text_model_key:
+                        logger.info(f"initializing key: {key} in {text_encoder.__class__.__name__}")
         
         else:
             text_encoder = None
@@ -501,6 +510,7 @@ class Data2VecUniModel(BaseFairseqModel):
         padding_count=None,
     ):
         text_teacher = False if target == None else self.cfg.text_teacher # deside whether to use text teacher by the input tpye
+        # print(text_teacher)
 
         features = source # v-ziyangma: batch_size x seq_len
 
@@ -743,7 +753,13 @@ class Data2VecUniModel(BaseFairseqModel):
             else:
                 text_scale = 1 / math.sqrt(sz)
 
-        result["losses"]["regression"] = loss.sum() * scale + text_loss.sum() * text_scale if text_teacher else loss.sum() * scale
+        speech_loss = loss.sum() * scale
+        result["loss_speech"] = speech_loss
+        if text_teacher:
+            text_loss = text_loss.sum() * text_scale
+            result["loss_text"] = text_loss
+
+        result["losses"]["regression"] = speech_loss + self.cfg.text_loss_alpha * text_loss if text_teacher else speech_loss
 
         if "sample_size" not in result:
             result["sample_size"] = loss.numel()

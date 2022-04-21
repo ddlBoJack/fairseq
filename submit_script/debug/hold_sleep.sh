@@ -3,39 +3,33 @@ set -x
 
 # edit your exp
 prefix_dir=/datablob/users/v-ziyangma
-model_name=data2vec_uni
-exp_name=data2vec_uni_100h_testfinetuning_output
+model_name=data2vec
+exp_name=data2vec_960h_hold_sleep
 
 #edit your config
-config_dir=./data2vec_uni/config/joint
-config_name=base_100h
+config_dir=./config/data2vec/audio/pretraining
+config_name=base_librispeech
 
 #edit your data
-data_path=${prefix_dir}/data/manifest/finetuning/
-train_subset=train_clean_100
+data_path=${prefix_dir}/data/manifest/debug/
+train_subset=train_960
 valid_subset=dev_other
 
 # edit your compute resource
 distributed_world_size=8
-update_freq=[1]
-max_tokens=3200000
+update_freq=[4]
+max_tokens=1900000
 
-#edit your pretrained model
-model_path=${prefix_dir}/model/${model_name}/data2vec_uni_100h_testfinetuning/checkpoint_best.pt
+#edit your ckpt
+model_path=${prefix_dir}/model/${model_name}/${exp_name}
+mkdir -p ${model_path}
 
 #edit your log: !!too slow to write to datablob!!
 # tb_path=${prefix_dir}/log/${model_name}/${exp_name}/tensorboard
 # mkdir -p ${tb_path}
 # log_file=${prefix_dir}/log/${model_name}/${exp_name}/hydra_train.log
 
-# set finetune output model
-finetuning_output_dir=${prefix_dir}/model/${model_name}/${exp_name}/${train_subset}_${valid_subset}
-# mkdir -p ${finetuning_output_dir}
-
-kenlm_model_path=${prefix_dir}/model/language_model/4-gram.bin
-lexicon_path=${prefix_dir}/model/language_model/librispeech_lexicon.lst
-
-echo "Start finetuning!!!"
+echo "Start training!!!"
 echo -e '\n'
 # pretrain
 # python -m debugpy --listen 5678 --wait-for-client fairseq_cli/hydra_train.py  \
@@ -45,17 +39,13 @@ python fairseq_cli/hydra_train.py  \
 task.data=${data_path}  \
 dataset.train_subset=${train_subset}  \
 dataset.valid_subset=${valid_subset}  \
-model.w2v_path=${model_path} \
-hydra.run.dir=${finetuning_output_dir} \
+checkpoint.save_dir=${model_path}  \
 distributed_training.distributed_world_size=${distributed_world_size}  \
 optimization.update_freq=${update_freq} \
-dataset.max_tokens=${max_tokens}  \
-task.normalize=true \
-+criterion.wer_kenlm_model=${kenlm_model_path}  \
-+criterion.wer_lexicon=${lexicon_path}  \
-+criterion.wer_lm_weight=2 \
-+criterion.wer_word_score=-1 \
-common.user_dir=data2vec_uni
+dataset.max_tokens=${max_tokens} \
+model.loss_beta=0.25 \
+distributed_training.ddp_backend=no_c10d \
+optimization.max_update=4000000
 # common.tensorboard_logdir=${tb_path} \
 # common.log_file=${log_file}  \
 
@@ -70,5 +60,3 @@ common.user_dir=data2vec_uni
 
 echo -e '\n'
 echo "finshed!"
-
-. ./submit_script/debug/hold_sleep.sh
