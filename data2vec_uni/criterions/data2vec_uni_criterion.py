@@ -115,14 +115,6 @@ class Data2vecUniCriterion(FairseqCriterion):
         metrics.log_scalar("ntokens", ntokens)
         metrics.log_scalar("nsentences", nsentences)
 
-        builtin_keys = {
-            "loss",
-            "ntokens",
-            "nsentences",
-            "sample_size",
-            "_world_size",
-        }
-
         world_size = utils.item(
             sum(log.get("_world_size", 0) for log in logging_outputs)
         )
@@ -149,13 +141,18 @@ class Data2vecUniCriterion(FairseqCriterion):
             for lk in log.keys():
                 if lk == "loss_text":
                     text_key += 1
-        # print("text_key {}".format(text_key))
+        # print("text_key: {}".format(text_key))
+        text_sample_size = utils.item(
+            sum(log.get("sample_size", 0) for log in logging_outputs if "loss_text" in log)
+        )
+        # print("text_sample_size: {}".format(text_sample_size))
         for k in data2vec_uni_log_keys:
             val = sum(log.get(k, 0) for log in logging_outputs if k in log)
-            val = val / text_key if text_key != 0 else val
             if k.startswith("loss_"):
-                metrics.log_scalar(k, val / sample_size, sample_size, round=3)
+                val = val / text_sample_size if text_key != 0 else val
+                metrics.log_scalar(k, val, text_sample_size+1, round=3)
             else:
+                val = val / text_key if text_key != 0 else val
                 metrics.log_scalar(k, val, round=3)
 
     @staticmethod

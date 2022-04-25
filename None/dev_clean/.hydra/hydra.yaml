@@ -1,0 +1,139 @@
+hydra:
+  run:
+    dir: ${common_eval.results_path}/${dataset.gen_subset}
+  sweep:
+    dir: /checkpoint/${env:USER}/${env:PREFIX}/${common_eval.results_path}
+    subdir: ${dataset.gen_subset}
+  hydra_logging:
+    version: 1
+    formatters:
+      simple:
+        format: '[%(asctime)s][HYDRA] %(message)s'
+    handlers:
+      console:
+        class: logging.StreamHandler
+        formatter: simple
+        stream: ext://sys.stdout
+    root:
+      level: INFO
+      handlers:
+      - console
+    loggers:
+      logging_example:
+        level: DEBUG
+    disable_existing_loggers: false
+  job_logging:
+    version: 1
+    formatters:
+      simple:
+        format: '[%(asctime)s][%(name)s][%(levelname)s] - %(message)s'
+    handlers:
+      console:
+        class: logging.StreamHandler
+        formatter: simple
+        stream: ext://sys.stdout
+      file:
+        class: logging.FileHandler
+        formatter: simple
+        filename: ${hydra.job.name}.log
+    root:
+      level: INFO
+      handlers:
+      - console
+      - file
+    disable_existing_loggers: false
+  sweeper:
+    _target_: hydra._internal.core_plugins.basic_sweeper.BasicSweeper
+    max_batch_size: null
+  launcher:
+    _target_: hydra._internal.core_plugins.basic_launcher.BasicLauncher
+  help:
+    app_name: ${hydra.job.name}
+    header: '${hydra.help.app_name} is powered by Hydra.
+
+      '
+    footer: 'Powered by Hydra (https://hydra.cc)
+
+      Use --hydra-help to view Hydra specific help
+
+      '
+    template: '${hydra.help.header}
+
+      == Configuration groups ==
+
+      Compose your configuration from those groups (group=option)
+
+
+      $APP_CONFIG_GROUPS
+
+
+      == Config ==
+
+      Override anything in the config (foo.bar=value)
+
+
+      $CONFIG
+
+
+      ${hydra.help.footer}
+
+      '
+  hydra_help:
+    hydra_help: ???
+    template: 'Hydra (${hydra.runtime.version})
+
+      See https://hydra.cc for more info.
+
+
+      == Flags ==
+
+      $FLAGS_HELP
+
+
+      == Configuration groups ==
+
+      Compose your configuration from those groups (For example, append hydra/job_logging=disabled
+      to command line)
+
+
+      $HYDRA_CONFIG_GROUPS
+
+
+      Use ''--cfg hydra'' to Show the Hydra config.
+
+      '
+  output_subdir: .hydra
+  overrides:
+    hydra: []
+    task:
+    - task=audio_finetuning
+    - task.data=/home/v-ziyangma/data/LibriSpeech/manifest/resource/
+    - task.labels=ltr
+    - decoding.type=viterbi
+    - decoding.lmweight=2
+    - decoding.wordscore=-1
+    - decoding.silweight=0
+    - decoding.unique_wer_file=True
+    - dataset.gen_subset=dev_clean
+    - common_eval.path=/home/v-ziyangma/model/data2vec_uni/data2vec_uni_finetuning_100h_860h_textDoEma_fromScratch_190w_G16/100000/train_clean_100_dev_other/checkpoints/checkpoint_best.pt
+    - decoding.beam=1500
+    - distributed_training.distributed_world_size=1
+    - task.normalize=true
+    - common.user_dir=data2vec_uni
+  job:
+    name: infer
+    override_dirname: common.user_dir=data2vec_uni,common_eval.path=/home/v-ziyangma/model/data2vec_uni/data2vec_uni_finetuning_100h_860h_textDoEma_fromScratch_190w_G16/100000/train_clean_100_dev_other/checkpoints/checkpoint_best.pt,dataset.gen_subset=dev_clean,decoding.beam=1500,decoding.lmweight=2,decoding.silweight=0,decoding.type=viterbi,decoding.unique_wer_file=True,decoding.wordscore=-1,distributed_training.distributed_world_size=1,task.data=/home/v-ziyangma/data/LibriSpeech/manifest/resource/,task.labels=ltr,task.normalize=true,task=audio_finetuning
+    id: ???
+    num: ???
+    config_name: infer
+    env_set: {}
+    env_copy: []
+    config:
+      override_dirname:
+        kv_sep: '='
+        item_sep: ','
+        exclude_keys: []
+  runtime:
+    version: 1.0.7
+    cwd: /home/v-ziyangma/github/fairseq
+  verbose: false

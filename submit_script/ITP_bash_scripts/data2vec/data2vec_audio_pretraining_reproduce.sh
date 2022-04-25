@@ -1,5 +1,6 @@
 #!/bin/bash
 set -x
+rm -rf ./outputs/
 
 # edit your exp
 prefix_dir=/datablob/users/v-ziyangma

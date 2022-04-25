@@ -18,8 +18,8 @@ speech_data=train_860
 
 # edit your compute resource
 distributed_world_size=4
-update_freq=[2]
-max_tokens=1000000
+update_freq=[16]
+max_tokens=950000
 
 # edit your ckpt
 model_path=~/model/${model_name}/${exp_name}
@@ -55,7 +55,8 @@ dataset.max_tokens=${max_tokens} \
 model.speech_model_path=${speech_model_path} \
 model.text_model_path=${text_model_path} \
 model.loss_beta=0.25 \
-common.user_dir=data2vec_uni
+common.user_dir=data2vec_uni \
+model.speech_pretrained_model=false
 # common.tensorboard_logdir=${tb_path} \
 # common.log_file=${log_file}  \
 
