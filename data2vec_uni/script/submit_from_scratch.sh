@@ -3,7 +3,7 @@ set -x
 rm -rf ./outputs/
 
 # edit your exp
-prefix_dir=/modelblob/users/v-ziyangma
+prefix_dir=/datablob/users/v-ziyangma
 model_name=data2vec_uni
 exp_name=data2vec_uni_100h_860h_textDoEma_fromScatch_190w_2x32G8_textLoss005
 
@@ -57,6 +57,7 @@ common.tensorboard_logdir=${tb_path} \
 common.user_dir=data2vec_uni \
 checkpoint.keep_interval_updates=20 \
 optimization.max_update=500000 \
+model.speech_pretrained_model=false \
 model.text_loss_alpha=0.05
 # common.log_file=${log_file}  \
 
