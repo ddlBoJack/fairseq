@@ -88,7 +88,7 @@ model:
   require_same_masks: true
   mask_dropout: 0
 
-  speech_pretrained_model: true
+  speech_pretrained_model: false
   speech_model_path: ???
 
   ########## below are for text teacher ##########
@@ -125,4 +125,4 @@ model:
   text_teacher: true
   text_init_transformer: false
   text_do_ema: true
-  text_loss_alpha: 0.1
+  text_loss_alpha: 0.05

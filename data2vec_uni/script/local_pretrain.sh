@@ -17,7 +17,7 @@ valid_subset=dev_clean
 speech_data=train_860
 
 # edit your compute resource
-distributed_world_size=4
+distributed_world_size=1
 update_freq=[16]
 max_tokens=950000
 

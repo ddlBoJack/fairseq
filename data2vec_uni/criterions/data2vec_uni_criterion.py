@@ -129,6 +129,7 @@ class Data2vecUniCriterion(FairseqCriterion):
             val = sum(log.get(k, 0) for log in logging_outputs)
             if k.startswith("loss_"):
                 metrics.log_scalar(k, val / sample_size, sample_size, round=3)
+                # print("loss_speech: {}".format(val / sample_size))
             else:
                 metrics.log_scalar(k, val / world_size, round=3)
         
@@ -151,6 +152,7 @@ class Data2vecUniCriterion(FairseqCriterion):
             if k.startswith("loss_"):
                 val = val / text_sample_size if text_key != 0 else val
                 metrics.log_scalar(k, val, text_sample_size+1, round=3)
+                # print("loss_text: {}".format(val))
             else:
                 val = val / text_key if text_key != 0 else val
                 metrics.log_scalar(k, val, round=3)

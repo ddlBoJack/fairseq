@@ -3,9 +3,9 @@ set -x
 rm -rf ./outputs/
 
 # edit your exp
-prefix_dir=/datablob/users/v-ziyangma
+prefix_dir=/modelblob/users/v-ziyangma
 model_name=data2vec_uni
-exp_name=data2vec_uni_100h_860h_textDoEma_fromScatch_190w_2x32G8
+exp_name=data2vec_uni_100h_860h_textDoEma_fromScatch_190w_2x32G8_textLoss005
 
 # edit your config
 config_dir=./data2vec_uni/config/joint
@@ -55,13 +55,14 @@ model.speech_model_path=${speech_model_path} \
 model.text_model_path=${text_model_path} \
 common.tensorboard_logdir=${tb_path} \
 common.user_dir=data2vec_uni \
-checkpoint.keep_interval_updates=10 \
-model.speech_pretrained_model=false \
-
-
+checkpoint.keep_interval_updates=20 \
+optimization.max_update=500000 \
+model.text_loss_alpha=0.05
 # common.log_file=${log_file}  \
 
-cp -r /tmp/code/outputs/ ${prefix_dir}/log/${model_name}/${exp_name}/
+# mkdir -p ${prefix_dir}/log/${model_name}/${exp_name}
+cp -r /tmp/code/outputs ${model_path}/
+cp -r $AZUREML_TB_PATH ${model_path}/
 
 # open http://localhost:6006/ to see the tensorboard
 # tensorboard --logdir ${tb_path} 
