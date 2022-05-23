@@ -78,7 +78,7 @@ model:
   ema_end_decay: 0.9999
   ema_anneal_end_step: 30000
   ema_transformer_only: true
-  ema_layers_only: false
+  ema_layers_only: true
 
   require_same_masks: true
   mask_dropout: 0

@@ -17,7 +17,7 @@ valid_subset=dev_clean
 speech_data=train_860
 
 # edit your compute resource
-distributed_world_size=1
+distributed_world_size=4
 update_freq=[16]
 max_tokens=950000
 
@@ -40,8 +40,8 @@ speech_model_path=/home/v-ziyangma/model/data2vec/download_pretrained/audio_base
 echo "Start pretraining!!!"
 echo -e '\n'
 # pretrain
-# python fairseq_cli/hydra_train.py \
-python -m debugpy --listen 5678 --wait-for-client fairseq_cli/hydra_train.py  \
+# python -m debugpy --listen 5678 --wait-for-client fairseq_cli/hydra_train.py  \
+python fairseq_cli/hydra_train.py \
 --config-dir ${config_dir}  \
 --config-name ${config_name}  \
 task.data=${data_path}  \
@@ -56,7 +56,8 @@ model.speech_model_path=${speech_model_path} \
 model.text_model_path=${text_model_path} \
 model.loss_beta=0.25 \
 common.user_dir=data2vec_uni \
-model.speech_pretrained_model=false
+model.speech_pretrained_model=false \
+checkpoint.reset_dataloader=true
 # common.tensorboard_logdir=${tb_path} \
 # common.log_file=${log_file}  \
 

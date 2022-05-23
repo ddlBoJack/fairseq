@@ -45,7 +45,8 @@ optimization.update_freq=${update_freq} \
 dataset.max_tokens=${max_tokens} \
 model.loss_beta=0.25 \
 distributed_training.ddp_backend=no_c10d \
-optimization.max_update=4000000
+optimization.max_update=4000000 \
+checkpoint.reset_dataloader=true
 # common.tensorboard_logdir=${tb_path} \
 # common.log_file=${log_file}  \
 

@@ -124,5 +124,5 @@ model:
 
   text_teacher: true
   text_init_transformer: false
-  text_do_ema: true
-  text_loss_alpha: 0.05
+  text_do_ema: false
+  text_loss_alpha: 0.1

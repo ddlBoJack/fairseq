@@ -6,7 +6,7 @@ rm -rf ./outputs/
 prefix_dir=/modelblob/users/v-ziyangma
 prefix_dir_wcy=/modelblob/users/v-chengw
 model_name=data2vec_uni
-exp_name=data2vec_uni_100h_860h_finetune_textDoEma_fromScatch_190w_2x32G8_textLoss05
+exp_name=data2vec_uni_100h_860h_finetune_textDoEma_fromScatch_190w_2x32G8_textLoss005
 
 #edit your config
 config_dir=./data2vec_uni/config/joint
@@ -24,7 +24,7 @@ update_freq=[1]
 max_tokens=3200000
 
 #edit your pretrained model
-model_path=${prefix_dir}/model/${model_name}/data2vec_uni_100h_860h_textDoEma_fromScatch_190w_2x32G8_textLoss05/checkpoint_311_300000.pt
+model_path=${prefix_dir}/model/${model_name}/data2vec_uni_100h_860h_textDoEma_fromScatch_190w_2x32G8_textLoss005/checkpoint_311_300000.pt
 
 #edit your log: !!too slow to write to datablob!!
 # tb_path=${prefix_dir}/log/${model_name}/${exp_name}/tensorboard
@@ -63,8 +63,8 @@ common.user_dir=data2vec_uni \
 common.tensorboard_logdir=${tb_path}
 # common.log_file=${log_file}  \
 
-cp -r /tmp/code/outputs ${prefix_dir}/model/${model_name}/${exp_name}/
-cp -r $AZUREML_TB_PATH ${prefix_dir}/model/${model_name}/${exp_name}/
+# cp -r /tmp/code/outputs ${prefix_dir}/model/${model_name}/${exp_name}/
+cp -r $AZUREML_TB_PATH ${finetuning_output_dir}/
 
 # open http://localhost:6006/ to see the tensorboard
 # tensorboard --logdir ${tb_path} 

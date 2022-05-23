@@ -3,9 +3,9 @@ set -x
 rm -rf ./outputs/
 
 # edit your exp
-prefix_dir=/datablob/users/v-ziyangma
+prefix_dir=/modelblob/users/v-ziyangma
 model_name=data2vec_uni
-exp_name=data2vec_uni_100h_860h_textDoEma_fromScatch_190w_2x32G8_textLoss005
+exp_name=data2vec_uni_100h_860h_fromScatch_190w_2x32G8_textLoss01
 
 # edit your config
 config_dir=./data2vec_uni/config/joint
@@ -18,8 +18,8 @@ valid_subset=dev_clean
 speech_data=train_860
 
 # edit your compute resource
-distributed_world_size=16
-update_freq=[2]
+distributed_world_size=32
+update_freq=[1]
 max_tokens=1900000
 
 #edit your ckpt
@@ -58,7 +58,8 @@ common.user_dir=data2vec_uni \
 checkpoint.keep_interval_updates=20 \
 optimization.max_update=500000 \
 model.speech_pretrained_model=false \
-model.text_loss_alpha=0.05
+model.text_do_ema=false \
+model.text_loss_alpha=0.1
 # common.log_file=${log_file}  \
 
 # mkdir -p ${prefix_dir}/log/${model_name}/${exp_name}
