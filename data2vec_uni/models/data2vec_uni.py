@@ -136,7 +136,7 @@ class Data2VecUniConfig(Wav2Vec2Config):
     text_ema_decay: float = field(
         default=0.999, 
         metadata={"help": "initial ema decay rate"}
-        )
+    )
     text_ema_end_decay: float = field(
         default=0.9999, metadata={"help": "final ema decay rate"}
     )
@@ -150,22 +150,31 @@ class Data2VecUniConfig(Wav2Vec2Config):
     )
     text_teacher: bool = field(
         default=False, metadata={"help": "whether to use text teacher"}
-        )
+    )
 
     text_init_transformer: bool = field(
         default=False, 
         metadata={"help": "whether to init the transformer of the text model"}
-        )
+    )
     
     text_do_ema: bool = field(
-        default=True, 
+        default=False, 
         metadata={"help": "whether to use ema"}
-        )
+    )
     text_loss_alpha: float = field(
         default=1, 
         metadata={"help": "coefficient for text_loss"}
-        )
+    )
 
+    ########## below are for CTC loss ##########
+    ctc_loss: bool = field(
+        default=False,
+        metadata={"help": "whether to use ctc loss"}
+    )
+    ctc_loss_alpha: float = field(
+        default=1,
+        metadata={"help": "coefficient for ctc loss"}
+    )
 
 def get_annealed_rate(start, end, curr_step, total_steps):
     r = end - start
@@ -277,7 +286,7 @@ class Data2VecUniModel(BaseFairseqModel):
         )
         skip_keys = set()
         if self.cfg.text_ema_transformer_layers_only:
-            for k, _ in self.text_encoder.sentence_encoder.embed_positions.named_parameters():
+            for k, _ in self.text_encoder.sentence_encoder.embed_tokens.named_parameters():
                 skip_keys.add(f"embed_tokens.{k}")
             for k, _ in self.text_encoder.sentence_encoder.embed_positions.named_parameters():
                 skip_keys.add(f"embed_positions.{k}")
@@ -287,10 +296,6 @@ class Data2VecUniModel(BaseFairseqModel):
                     _,
                 ) in self.text_encoder.sentence_encoder.layernorm_embedding.named_parameters():
                     skip_keys.add(f"layernorm_embedding.{k}")
-            if self.text_encoder.sentence_encoder.layer_norm is not None:
-                for k, _ in self.text_encoder.sentence_encoder.layer_norm.named_parameters():
-                    skip_keys.add(f"layernorm_embedding.{k}")
-                    self.text_encoder.text_ema
             
             for k, _ in self.encoder.pos_conv.named_parameters():
                 skip_keys.add(f"pos_conv.{k}")
@@ -509,7 +514,7 @@ class Data2VecUniModel(BaseFairseqModel):
         mask_channel_indices=None,
         padding_count=None,
     ):
-        text_teacher = False if target == None else self.cfg.text_teacher # deside whether to use text teacher by the input tpye
+        text_teacher = False if target == None else self.cfg.text_teacher # decide whether to use text teacher by the input tpye
         # print(text_teacher)
 
         features = source # v-ziyangma: batch_size x seq_len
@@ -841,7 +846,7 @@ class Data2VecTextEncoder(FairseqEncoder):
             len(dictionary), cfg.text_transformer.encoder.embed_dim, dictionary.pad()
         )
 
-        self.sentence_encoder = self.build_encoder(cfg, dictionary, embed_tokens)
+        self.sentence_encoder = self.build_encoder(cfg, dictionary, embed_tokens) #regular transformer with absolute positional embeddings
         self.mask_idx = dictionary.index("<mask>")
         assert self.mask_idx != dictionary.unk(), dictionary.symbols
 
