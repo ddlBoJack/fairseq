@@ -1,11 +1,13 @@
 #!/bin/bash
 set -x
 rm -rf ./outputs/
+pip install wandb
+python -m wandb login a7e222c6124a8097a90dc62c0a5d3b8d27d17bfb
 
 # edit your exp
 prefix_dir=/modelblob/users/v-ziyangma
 model_name=data2vec_uni
-exp_name=data2vec_uni_100h_860h_fromScatch_190w_2x32G8_textLoss01
+exp_name=data2vec_uni_100h_860h_align_phn1_380w_2x32G8_beta0
 
 # edit your config
 config_dir=./data2vec_uni/config/joint
@@ -18,9 +20,9 @@ valid_subset=dev_clean
 speech_data=train_860
 
 # edit your compute resource
-distributed_world_size=32
+distributed_world_size=16
 update_freq=[1]
-max_tokens=1900000
+max_tokens=2800000
 
 #edit your ckpt
 model_path=${prefix_dir}/model/${model_name}/${exp_name}
@@ -34,7 +36,7 @@ speech_model_path=${prefix_dir}/model/data2vec/download_pretrained/audio_base_ls
 # tb_path=${prefix_dir}/log/${model_name}/${exp_name}/tensorboard
 # mkdir -p ${tb_path}
 # log_file=${prefix_dir}/log/${model_name}/${exp_name}/hydra_train.log
-tb_path=$AZUREML_TB_PATH
+# tb_path=$AZUREML_TB_PATH
 
 echo "Start pretraining!!!"
 echo -e '\n'
@@ -53,18 +55,19 @@ optimization.update_freq=${update_freq} \
 dataset.max_tokens=${max_tokens} \
 model.speech_model_path=${speech_model_path} \
 model.text_model_path=${text_model_path} \
-common.tensorboard_logdir=${tb_path} \
-common.user_dir=data2vec_uni \
 checkpoint.keep_interval_updates=20 \
-optimization.max_update=500000 \
 model.speech_pretrained_model=false \
+model.text_pretrained_model=false \
+model.text_teacher=false \
 model.text_do_ema=false \
-model.text_loss_alpha=0.1
+common.wandb_project=data2vec_uni \
+common.user_dir=data2vec_uni
+# common.tensorboard_logdir=${tb_path} \
 # common.log_file=${log_file}  \
 
 # mkdir -p ${prefix_dir}/log/${model_name}/${exp_name}
-cp -r /tmp/code/outputs ${model_path}/
-cp -r $AZUREML_TB_PATH ${model_path}/
+# cp -r /tmp/code/outputs ${model_path}/
+# cp -r $AZUREML_TB_PATH ${model_path}/
 
 # open http://localhost:6006/ to see the tensorboard
 # tensorboard --logdir ${tb_path} 

@@ -1,4 +1,5 @@
 #!/bin/bash
+#bash submit_script/ITP_bash_scripts/data2vec/data2vec_audio_finetuning_wandb.sh
 set -x
 rm -rf ./outputs/
 pip install wandb
@@ -7,16 +8,16 @@ python -m wandb login a7e222c6124a8097a90dc62c0a5d3b8d27d17bfb
 # edit your exp
 prefix_dir=/modelblob/users/v-ziyangma
 prefix_dir_wcy=/modelblob/users/v-chengw
-model_name=data2vec_uni
-exp_name=data2vec_uni_100h_860h_fromScatch_190w_textLoss01_finetune_beta0
+model_name=data2vec
+exp_name=data2vec_finetuning_search
 
 #edit your config
-config_dir=./data2vec_uni/config/joint
+config_dir=./config/data2vec/audio/finetuning
 config_name=base_100h
 
 #edit your data
 data_path=${prefix_dir_wcy}/data/librispeech/manifest/resource/
-# data_path=${prefix_dir}/data/manifest/finetuning/
+# data_path=/tmp/data/manifest/resource/
 train_subset=train_clean_100
 valid_subset=dev_other
 
@@ -26,21 +27,21 @@ update_freq=[1]
 max_tokens=3200000
 
 #edit your pretrained model
-checkpoint=checkpoint_207_200000
-model_path=${prefix_dir}/model/${model_name}/data2vec_uni_100h_860h_fromScatch_190w_32G8_textLoss01_beta0/${checkpoint}.pt
+checkpoint=checkpoint_5243_110000
+
+kenlm_model_path=${prefix_dir}/model/language_model/4-gram.bin
+lexicon_path=${prefix_dir}/model/language_model/librispeech_lexicon.lst
 
 #edit your log: !!too slow to write to datablob!!
 # tb_path=${prefix_dir}/log/${model_name}/${exp_name}/tensorboard
 # mkdir -p ${tb_path}
 # log_file=${prefix_dir}/log/${model_name}/${exp_name}/hydra_train.log
-# tb_path=$AZUREML_TB_PATH
+
+model_path=/datablob/users/v-ziyangma/model/data2vec/data2vec_dev_test_32G8_380w/${checkpoint}.pt
 
 # set finetune output model
-finetuning_output_dir=${prefix_dir}/model/${model_name}/${exp_name}/${checkpoint}_${train_subset}_${valid_subset}_viterbi_textLoss01_beta0
+finetuning_output_dir=${prefix_dir}/model/${model_name}/${exp_name}/data2vec_dev_test_32G8_380w/${checkpoint}_${train_subset}_${valid_subset}_dev&test_viterbi
 # mkdir -p ${finetuning_output_dir}
-
-kenlm_model_path=${prefix_dir}/model/language_model/4-gram.bin
-lexicon_path=${prefix_dir}/model/language_model/librispeech_lexicon.lst
 
 echo "Start finetuning!!!"
 echo -e '\n'
@@ -58,22 +59,19 @@ distributed_training.distributed_world_size=${distributed_world_size}  \
 optimization.update_freq=${update_freq} \
 dataset.max_tokens=${max_tokens}  \
 task.normalize=true \
-common.wandb_project=data2vec_uni \
-common.user_dir=data2vec_uni \
+common.wandb_project=data2vec_baseline \
 # +criterion.wer_kenlm_model=${kenlm_model_path}  \
 # +criterion.wer_lexicon=${lexicon_path}  \
 # +criterion.wer_lm_weight=2 \
 # +criterion.wer_word_score=-1 \
 # hydra.run.dir=${finetuning_output_dir} \
-# common.tensorboard_logdir=${tb_path}
 # common.log_file=${log_file}  \
+# common.tensorboard_logdir=$AZUREML_TB_PATH \
 
-# cp -r /tmp/code/outputs ${prefix_dir}/model/${model_name}/${exp_name}/
-# cp -r $AZUREML_TB_PATH ${finetuning_output_dir}/
+# cp -r /tmp/code/outputs/ ${prefix_dir}/log/${model_name}/${exp_name}/
 
 # open http://localhost:6006/ to see the tensorboard
 # tensorboard --logdir ${tb_path} 
-
 
 echo -e '\n'
 echo "finshed!"

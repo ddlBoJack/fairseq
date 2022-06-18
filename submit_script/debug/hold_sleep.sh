@@ -16,7 +16,7 @@ train_subset=train_960
 valid_subset=dev_other
 
 # edit your compute resource
-distributed_world_size=8
+distributed_world_size=4
 update_freq=[4]
 max_tokens=1900000
 

@@ -175,6 +175,14 @@ class Data2VecUniConfig(Wav2Vec2Config):
         default=1,
         metadata={"help": "coefficient for ctc loss"}
     )
+    align_loss: bool = field(
+        default=False,
+        metadata={"help": "whether to use align loss at each frame"}
+    )
+    align_loss_alpha: float = field(
+        default=1,
+        metadata={"help": "coefficient for align loss at each frame"}
+    )
 
 def get_annealed_rate(start, end, curr_step, total_steps):
     r = end - start
@@ -184,7 +192,7 @@ def get_annealed_rate(start, end, curr_step, total_steps):
 
 @register_model("data2vec_uni", dataclass=Data2VecUniConfig)
 class Data2VecUniModel(BaseFairseqModel):
-    def __init__(self, cfg: Data2VecUniConfig, text_encoder):
+    def __init__(self, cfg: Data2VecUniConfig, text_encoder, dictionary):
         super().__init__()
         self.cfg = cfg
 
@@ -233,7 +241,7 @@ class Data2VecUniModel(BaseFairseqModel):
         ) # v-ziyangma: torch.Size([768]), from a uniform distribution
 
         self.encoder = TransformerEncoder(cfg) # v-ziyangma: from wav2vec2
-        self.layer_norm = LayerNorm(self.extractor_embed) # v-ziyangma: LayerNorm(512)
+        self.layer_norm = LayerNorm(self.extractor_embed) # v-ziyangma: LayerNorm(512) between x/320 and transformer
 
         self.final_proj = nn.Linear(self.embed, self.embed) # v-ziyangma: p768 -> 768
 
@@ -244,11 +252,15 @@ class Data2VecUniModel(BaseFairseqModel):
         self.text_ema = None
 
         # load pretrained speech model if specified
+        # TODO: add reloading about the task parameters of pretrained model
         if cfg.speech_pretrained_model:
             logger.info(f"loading pretrained speech model from {cfg.speech_model_path} ...")
             state_dict=torch.load(cfg.speech_model_path)
             self.load_state_dict(state_dict["model"], strict=False)
-
+        
+        self.dictionary = dictionary
+        if cfg.align_loss or cfg.ctc_loss:
+            self.lm_proj = nn.Linear(self.embed, len(self.dictionary))
 
     def make_ema_teacher(self):
         # v-ziyangma: "We found it more efficient and slightly more accurate to share the parameters of the feature encoder and the positional encoder between the teacher and student networks."
@@ -410,7 +422,7 @@ class Data2VecUniModel(BaseFairseqModel):
             text_encoder = None
 
         
-        return cls(cfg, text_encoder)
+        return cls(cfg, text_encoder, task.target_dictionary)
 
     def apply_mask(
         self,
@@ -516,6 +528,7 @@ class Data2VecUniModel(BaseFairseqModel):
     ):
         text_teacher = False if target == None else self.cfg.text_teacher # decide whether to use text teacher by the input tpye
         # print(text_teacher)
+        add_align_loss = False if target == None else self.cfg.align_loss # decide whether to use align loss by the input tpye
 
         features = source # v-ziyangma: batch_size x seq_len
 
@@ -724,13 +737,34 @@ class Data2VecUniModel(BaseFairseqModel):
                 text_upsampling = torch.cat(text_upsampling_list, dim=0)
                 assert (text_upsampling.size() == x.size()), f"text_upsampling.size() = {text_upsampling.size()} does not match x.size() = {x.size()}"
                 text_y = text_upsampling[mask_indices]
+            
+            # below are for align loss
+            if add_align_loss:
+                # do upsampling with target and meta
+                target_upsampling_list = []
+                for sentence, sentence_meta in zip(target, meta):
+                    sentence_upsampling = torch.cat(
+                        [token_.repeat(meta_) for token_ ,meta_ in zip(sentence, sentence_meta)], dim=0
+                    )
+                    if len(sentence_upsampling) < len(mask_indices[-1]):
+                        sentence_upsampling = torch.cat(
+                            [sentence_upsampling, sentence_upsampling.new_zeros(len(mask_indices[-1]) - len(sentence_upsampling))], dim=0
+                        ).unsqueeze(0)
+                    else:
+                        sentence_upsampling = sentence_upsampling[:len(mask_indices[-1])].unsqueeze(0)
+                    target_upsampling_list.append(sentence_upsampling)
+                target_upsampling = torch.cat(target_upsampling_list, dim=0)
+                assert (target_upsampling.size() == x.size()[:-1]), f"target_upsampling.size() = {target_upsampling.size()} does not match x.size() = {x.size()[:-1]}"
+
+                batch_unpadding_len = target_upsampling.new_zeros(target_upsampling.size()).bool() if padding_mask is None else padding_mask
+                target_y = target_upsampling[~batch_unpadding_len] # compute loss with all the tokens (not only the masked tokens)
+
 
         # compute loss
-        x = x[mask_indices]
-        x = self.final_proj(x)
-        text_x = self.text_encoder.regression_head(x) if text_teacher else None
+        orig_x = x[mask_indices]
+        x = self.final_proj(orig_x)
 
-        sz = x.size(-1)
+        sz = x.size(-1) # 768
 
         if self.loss_beta == 0:
             loss = F.mse_loss(x.float(), y.float(), reduction="none").sum(dim=-1)
@@ -738,8 +772,21 @@ class Data2VecUniModel(BaseFairseqModel):
             loss = F.smooth_l1_loss(
                 x.float(), y.float(), reduction="none", beta=self.loss_beta
             ).sum(dim=-1)
-        
+
+        if self.loss_scale is not None:
+            scale = self.loss_scale
+        else:
+            scale = 1 / math.sqrt(sz)
+
+        speech_loss = loss.sum() * scale
+        result["loss_speech"] = speech_loss
+
+        result["losses"]["regression"] = speech_loss 
+
+        # compute text teacher loss
         if text_teacher:
+            text_x = self.text_encoder.regression_head(orig_x)
+
             if self.cfg.text_loss_beta == 0:
                 text_loss = F.mse_loss(text_x.float(), text_y.float(), reduction="none").sum(dim=-1)
             else:
@@ -747,24 +794,31 @@ class Data2VecUniModel(BaseFairseqModel):
                     text_x.float(), text_y.float(), reduction="none", beta=self.cfg.text_loss_beta
                 ).sum(dim=-1)
 
-        if self.loss_scale is not None:
-            scale = self.loss_scale
-        else:
-            scale = 1 / math.sqrt(sz)
-        
-        if text_teacher:
             if self.cfg.text_loss_scale is not None:
                 text_scale = self.cfg.text_loss_scale
             else:
                 text_scale = 1 / math.sqrt(sz)
 
-        speech_loss = loss.sum() * scale
-        result["loss_speech"] = speech_loss
-        if text_teacher:
             text_loss = text_loss.sum() * text_scale
             result["loss_text"] = text_loss
+            result["losses"]["regression"] = result["losses"]["regression"] + self.cfg.text_loss_alpha * text_loss
+        
+        # compute align loss
+        if add_align_loss:
+            unmasked_x, _ = self.encoder(
+            features,
+            padding_mask=padding_mask,
+            layer=layer,
+            )
+            unmasked_x = unmasked_x[~batch_unpadding_len]
+            unmasked_x = self.lm_proj(unmasked_x)
+            target_y_onehot = torch.zeros(unmasked_x.size(0), unmasked_x.size(1)).to(unmasked_x.device).scatter_(1, target_y.long().unsqueeze(-1), 1).type_as(unmasked_x)
+            align_loss = F.cross_entropy(unmasked_x, target_y_onehot, reduction="mean")
+            result["loss_align"] = align_loss
+            result["losses"]["regression"] = result["losses"]["regression"] + self.cfg.align_loss_alpha * align_loss
 
-        result["losses"]["regression"] = speech_loss + self.cfg.text_loss_alpha * text_loss if text_teacher else speech_loss
+        # compute ctc loss
+        # TODO
 
         if "sample_size" not in result:
             result["sample_size"] = loss.numel()
@@ -790,7 +844,7 @@ class Data2VecUniModel(BaseFairseqModel):
 
         if self.ema is not None:
             result["ema_decay"] = self.ema.get_decay() * 1000
-        
+
         if text_teacher:
             if self.text_ema is not None:
                 result["text_ema_decay"] = self.text_ema.get_decay() * 1000

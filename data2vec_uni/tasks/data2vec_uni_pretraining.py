@@ -148,7 +148,7 @@ class UniPretrainingTask(FairseqTask):
             logger.info(f"loading target dictionary from {dict_path}")
             dictionary = Dictionary.load(dict_path)
             self.mask_idx = dictionary.add_symbol("<mask>")
-            logger.info("dictionary: {} types with 0:<s>, 1:</s>, 2:<pad>, 3:<unk>, and {}:<mask>".format(len(dictionary), self.mask_idx))
+            logger.info("dictionary: {} types with 0:<s>, 1:<pad>, 2:</s>, 3:<unk>, and {}:<mask>".format(len(dictionary), self.mask_idx))
             return dictionary
         return None
 

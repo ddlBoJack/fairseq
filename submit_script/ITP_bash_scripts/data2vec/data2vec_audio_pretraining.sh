@@ -1,23 +1,26 @@
 #!/bin/bash
 set -x
+rm -rf ./outputs/
+pip install wandb
+python -m wandb login a7e222c6124a8097a90dc62c0a5d3b8d27d17bfb
 
 # edit your exp
 prefix_dir=/datablob/users/v-ziyangma
 model_name=data2vec
-exp_name=data2vec_960h_devclean
+exp_name=data2vec_dev_test_32G8_380w
 
 #edit your config
 config_dir=./config/data2vec/audio/pretraining
 config_name=base_librispeech
 
 #edit your data
-data_path=${prefix_dir}/data/manifest/debug/
-train_subset=train_960
-valid_subset=dev_clean
+data_path=${prefix_dir}/data/manifest/resource/
+train_subset=dev_test
+valid_subset=dev_other
 
 # edit your compute resource
-distributed_world_size=16
-update_freq=[1]
+distributed_world_size=8
+update_freq=[2]
 max_tokens=3800000
 
 #edit your ckpt
@@ -42,11 +45,15 @@ dataset.valid_subset=${valid_subset}  \
 checkpoint.save_dir=${model_path}  \
 distributed_training.distributed_world_size=${distributed_world_size}  \
 optimization.update_freq=${update_freq} \
-dataset.max_tokens=${max_tokens}
+dataset.max_tokens=${max_tokens} \
+checkpoint.save_interval_updates=10000 \
+checkpoint.keep_interval_updates=40 \
+common.wandb_project=data2vec_baseline \
+distributed_training.ddp_backend=no_c10d \
 # common.tensorboard_logdir=${tb_path} \
 # common.log_file=${log_file}  \
 
-cp -r /tmp/code/outputs/ ${prefix_dir}/log/${model_name}/${exp_name}/
+# cp -r /tmp/code/outputs/ ${prefix_dir}/log/${model_name}/${exp_name}/
 
 # finetune
 #TODO: add finetune

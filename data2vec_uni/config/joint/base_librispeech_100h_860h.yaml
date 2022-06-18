@@ -22,7 +22,7 @@ task:
   speech_data: train_860 # set "None" to disable speech data
 
 dataset:
-  num_workers: 6
+  num_workers: 4
   max_tokens: 3800000
   skip_invalid_size_inputs_valid_test: true
   validate_interval: 5
@@ -42,6 +42,7 @@ criterion:
     - loss_speech
     - loss_text
     - text_ema_decay
+    - loss_align
 
 optimization:
   max_update: 400000
@@ -70,7 +71,7 @@ model:
   mask_prob: 0.65
   mask_length: 10
 
-  loss_beta: 0.25
+  loss_beta: 0
   loss_scale: null
 
   instance_norm_target_layer: true
@@ -92,7 +93,7 @@ model:
   speech_model_path: ???
 
   ########## below are for text teacher ##########
-  text_pretrained_model: true
+  text_pretrained_model: false
   text_model_path: ???
   text_max_positions: 512
 
@@ -122,7 +123,13 @@ model:
       learned_pos: true
       layerdrop: 0
 
-  text_teacher: true
+  text_teacher: false
   text_init_transformer: false
   text_do_ema: false
   text_loss_alpha: 0.1
+
+  ########## below are for supervised loss ##########
+  ctc_loss: false
+  ctc_loss_alpha: 1
+  align_loss: true
+  align_loss_alpha: 1

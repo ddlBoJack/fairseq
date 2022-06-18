@@ -156,6 +156,19 @@ class Data2vecUniCriterion(FairseqCriterion):
             else:
                 val = val / text_key if text_key != 0 else val
                 metrics.log_scalar(k, val, round=3)
+    
+        supervised_log_keys = [
+            "loss_align"
+        ]
+        align_key = 0
+        for log in logging_outputs:
+            for lk in log.keys():
+                if lk == "loss_align":
+                    align_key += 1
+        for k in supervised_log_keys:
+            val = sum(log.get(k, 0) for log in logging_outputs if k in log)
+            val = val / align_key if align_key != 0 else val
+            metrics.log_scalar(k, val, round=3)
 
     @staticmethod
     def logging_outputs_can_be_summed() -> bool:
