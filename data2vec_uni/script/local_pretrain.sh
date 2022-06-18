@@ -17,7 +17,7 @@ valid_subset=dev_clean
 speech_data=None
 
 # edit your compute resource
-distributed_world_size=4
+distributed_world_size=1
 update_freq=[4]
 max_tokens=700000
 

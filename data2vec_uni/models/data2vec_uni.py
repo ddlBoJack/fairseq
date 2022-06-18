@@ -812,8 +812,7 @@ class Data2VecUniModel(BaseFairseqModel):
             )
             unmasked_x = unmasked_x[~batch_unpadding_len]
             unmasked_x = self.lm_proj(unmasked_x)
-            target_y_onehot = torch.zeros(unmasked_x.size(0), unmasked_x.size(1)).to(unmasked_x.device).scatter_(1, target_y.long().unsqueeze(-1), 1).type_as(unmasked_x)
-            align_loss = F.cross_entropy(unmasked_x, target_y_onehot, reduction="mean")
+            align_loss = F.cross_entropy(unmasked_x, target_y.long(), reduction="mean")
             result["loss_align"] = align_loss
             result["losses"]["regression"] = result["losses"]["regression"] + self.cfg.align_loss_alpha * align_loss
 
