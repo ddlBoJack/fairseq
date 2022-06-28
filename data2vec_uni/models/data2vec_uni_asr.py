@@ -305,7 +305,6 @@ class Wav2VecEncoder(FairseqEncoder):
                 w2v_args.model.checkpoint_activations = cfg.checkpoint_activations
 
         w2v_args.task.data = cfg.data
-        w2v_args.task.labels = 'ltr'
         task = tasks.setup_task(w2v_args.task)
         w2v_args.model.text_teacher = False
         w2v_args.model.text_do_ema = False
