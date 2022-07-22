@@ -22,6 +22,7 @@ from .wav2vec2 import (
     ConvFeatureExtractionModel,
     Wav2Vec2Config,
     TransformerEncoder,
+    TransformerEncoder4Text,
 )
 from fairseq.modules import (
     GradMultiply,
@@ -93,6 +94,9 @@ class Data2VecJtConfig(Wav2Vec2Config):
     )
     text_start_transformer_layer: int = field(
         default=0, metadata={"help": "which transformer layer to start loss for text"}
+    )
+    text_transofmer_layers: int = field(
+        default=6, metadata={"help": "how many transformer layers to use for text"}
     )
     text_dropout_input: float = field(
         default=0, metadata={"help": "text input dropout"}
@@ -185,16 +189,17 @@ class Data2VecJtModel(BaseFairseqModel):
                 cfg.text_embed_dim,
                 self.source_dictionary.pad(),
                 learned=True)
-            self.text_layernorm_embedding = LayerNorm(cfg.text_embed_dim)
-            self.text_dropout_module = nn.Dropout(cfg.text_dropout_input)
+            # self.text_layernorm_embedding = LayerNorm(cfg.text_embed_dim)
+            # self.text_dropout_module = nn.Dropout(cfg.text_dropout_input)
 
             self.text_post_extract_proj = nn.Linear(cfg.text_embed_dim, cfg.text_embed_dim)
             self.text_proj_d = nn.Linear(cfg.text_embed_dim, len(self.target_dictionary))
+            self.text_encoder = TransformerEncoder4Text(cfg)
 
     def forward_embedding(self, src_tokens):
         x = self.text_embed_tokens(src_tokens) + self.text_embed_positions(src_tokens)
-        x = self.text_layernorm_embedding(x)
-        x = self.text_dropout_module(x)
+        # x = self.text_layernorm_embedding(x)
+        # x = self.text_dropout_module(x)
         return x
 
     def make_ema_teacher(self):
@@ -552,8 +557,14 @@ class Data2VecJtModel(BaseFairseqModel):
                 text_x = text_x * (1 - text_padding_mask.unsqueeze(-1).type_as(text_x))
             text_x = self.text_post_extract_proj(text_x)
             
+            # text encoder
+            text_x, _ = self.text_encoder(
+            text_x,
+            padding_mask=text_padding_mask,
+            layer=None,
+            )
             # share the same transformer with speech
-            text_x, text_layer_results = self.encoder.forward_text(
+            text_x, _ = self.encoder.forward_text(
             text_x,
             padding_mask=text_padding_mask,
             tgt_layer=None, 

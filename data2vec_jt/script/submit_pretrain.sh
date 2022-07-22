@@ -1,19 +1,22 @@
 #!/bin/bash
-export PYTHONPATH=~/github/fairseq:$PYTHONPATH
+set -x
+rm -rf ./outputs/
 export CUDA_LAUNCH_BLOCKING=1
 export HYDRA_FULL_ERROR=1
-cd ~/github/fairseq
+pip install wandb
+python -m wandb login a7e222c6124a8097a90dc62c0a5d3b8d27d17bfb
 
 # edit your exp
+prefix_dir=/modelblob/users/v-ziyangma
 model_name=data2vec_jt
-exp_name=pretrain_debug
+exp_name=data2vec_jt_960h_960h_6text_6share_10kstart
 
 # edit your config
-config_dir=~/github/fairseq/data2vec_jt/config/pretraining
-config_name=debug
+config_dir=./data2vec_jt/config/pretraining
+config_name=base_librispeech
 
 # edit your data
-data_path=~/data/LibriSpeech/manifest/data2vec_jt/
+data_path=${prefix_dir}/data/manifest/data2vec_jt/
 train_subset=train_960
 valid_subset=train_960
 source_data=train_960
@@ -22,19 +25,16 @@ target_data=train_960
 # edit your compute resource
 distributed_world_size=4
 update_freq=[8]
-max_tokens=600000
+max_tokens=1400000
 
 # edit your ckpt
-model_path=~/model/${model_name}/${exp_name}
+model_path=${prefix_dir}/model/${model_name}/${exp_name}
 mkdir -p ${model_path}
 
 # edit your log
-tb_path=~/log/${model_name}/${exp_name}/tensorboard
-mkdir -p ${tb_path}
-log_file=~/log/${model_name}/${exp_name}/hydra_train.log
-
-
-export CUDA_VISIBLE_DEVICES=0,1,2,3
+# tb_path=~/log/${model_name}/${exp_name}/tensorboard
+# mkdir -p ${tb_path}
+# log_file=~/log/${model_name}/${exp_name}/hydra_train.log
 
 echo "Start pretraining!!!"
 echo -e '\n'
@@ -48,21 +48,24 @@ task.source_data=${source_data}  \
 task.target_data=${target_data}  \
 dataset.train_subset=${train_subset}  \
 dataset.valid_subset=${valid_subset}  \
-common.tensorboard_logdir=${tb_path} \
-common.log_file=${log_file}  \
 checkpoint.save_dir=${model_path}  \
 distributed_training.distributed_world_size=${distributed_world_size}  \
 optimization.update_freq=${update_freq} \
 dataset.max_tokens=${max_tokens} \
-common.user_dir=data2vec_jt \
-common.log_interval=1 \
+common.log_interval=200 \
+checkpoint.keep_interval_updates=40 \
 checkpoint.save_interval_updates=10000 \
-dataset.num_workers=4 \
 checkpoint.reset_dataloader=true \
-common.wandb_project=debug \
+common.wandb_project=data2vec_jt \
+common.user_dir=data2vec_jt \
+# common.tensorboard_logdir=${tb_path} \
+# common.log_file=${log_file}  \
 
 # open http://localhost:6006/ to see the tensorboard
 # tensorboard --logdir ${tb_path} 
+
+echo -e '\n'
+echo "finshed!"
 
 # cmd
 # bash submit_script/local_bash_scripts/data2vec/data2vec_audio.sh

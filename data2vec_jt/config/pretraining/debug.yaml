@@ -98,7 +98,8 @@ model:
   # below are for text
   text_embed_dim: 768
   max_source_positions: 1800 # TODO: max length in train_960.phn is 1486, max length in dev_clean.phn is 1631
-  text_start_transformer_layer: 6 # TODO
+  text_start_transformer_layer: 6
+  text_transofmer_layers: 6
   text_dropout_input: 0.1
-  ctc_start_step: 1000
-  ctc_loss_alpha: 0.05
+  ctc_start_step: 0
+  ctc_loss_alpha: 0.01

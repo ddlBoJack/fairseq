@@ -4,7 +4,7 @@ common:
   fp16: true
   log_format: json
   log_interval: 200
-  tensorboard_logdir: ???
+  tensorboard_logdir: tb
 
 checkpoint:
   save_interval: 5
@@ -13,11 +13,16 @@ checkpoint:
   no_epoch_checkpoints: true
 
 task:
-  _name: audio_pretraining
+  _name: data2vec_jt_pretraining
   data: ???
   max_sample_size: 320000
   min_sample_size: 32000
   normalize: true
+
+  source_label: phn
+  source_data: ???
+  target_label: ltr
+  target_data: ???
 
 dataset:
   num_workers: 6
@@ -34,11 +39,13 @@ distributed_training:
   ddp_backend: legacy_ddp
 
 criterion:
-  _name: model
+  _name: data2vec_jt_criterion
   log_keys:
     - ema_decay
     - target_var
     - pred_var
+    - loss_speech
+    - ctc_loss
 
 optimization:
   max_update: 400000
@@ -56,7 +63,7 @@ lr_scheduler:
   phase_ratio: [0.03,0.9,0.07]
 
 model:
-  _name: data2vec_audio
+  _name: data2vec_jt
   extractor_mode: layer_norm
   encoder_layerdrop: 0.05
   dropout_input: 0.0
@@ -84,3 +91,12 @@ model:
 
   require_same_masks: true
   mask_dropout: 0
+
+  # below are for text
+  text_embed_dim: 768
+  max_source_positions: 1800 # TODO: max length in train_960.phn is 1486, max length in dev_clean.phn is 1631
+  text_start_transformer_layer: 6
+  text_transofmer_layers: 6
+  text_dropout_input: 0.1
+  ctc_start_step: 10000
+  ctc_loss_alpha: 0.01
