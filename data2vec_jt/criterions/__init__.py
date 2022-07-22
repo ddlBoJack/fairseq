@@ -1,0 +1,1 @@
+from .data2vec_jt_criterion import Data2vecJtCriterion
