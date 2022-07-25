@@ -102,4 +102,4 @@ model:
   text_transofmer_layers: 6
   text_dropout_input: 0.1
   ctc_start_step: 0
-  ctc_loss_alpha: 0.01
+  ctc_loss_alpha: 0.0001

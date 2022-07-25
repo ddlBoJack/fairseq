@@ -548,7 +548,7 @@ class Data2VecJtModel(BaseFairseqModel):
             result["sample_size"] = loss.numel()
 
         # below are for text ctc loss
-        if self.num_updates > self.cfg.ctc_start_step and source_label is not None and target_label is not None:
+        if self.num_updates >= self.cfg.ctc_start_step and source_label is not None and target_label is not None:
             text_padding_mask = source_label.eq(self.source_dictionary.pad())
             has_pads = text_padding_mask.any()
             # self.check_label_range(source_label, self.source_dictionary)
@@ -593,7 +593,8 @@ class Data2VecJtModel(BaseFairseqModel):
             targets_flat = target_label.masked_select(target_pad_mask)
             target_lengths = target_pad_mask.sum(-1)
             
-            with torch.backends.cudnn.flags(enabled=False):
+            # with torch.backends.cudnn.flags(enabled=False):
+            with torch.backends.cudnn.flags(deterministic=True):
                 ctc_loss = F.ctc_loss(
                     lprobs,
                     targets_flat,
