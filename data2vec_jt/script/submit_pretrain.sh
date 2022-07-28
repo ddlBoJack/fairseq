@@ -9,7 +9,7 @@ python -m wandb login a7e222c6124a8097a90dc62c0a5d3b8d27d17bfb
 # edit your exp
 prefix_dir=/modelblob/users/v-ziyangma
 model_name=data2vec_jt
-exp_name=data2vec_jt_960h_960h_6text_6share_10kstart
+exp_name=data2vec_jt_960h_960h_6text_6share_1add_50kstart
 
 # edit your config
 config_dir=./data2vec_jt/config/pretraining
@@ -23,8 +23,8 @@ source_data=train_960
 target_data=train_960
 
 # edit your compute resource
-distributed_world_size=4
-update_freq=[8]
+distributed_world_size=8
+update_freq=[4]
 max_tokens=1400000
 
 # edit your ckpt

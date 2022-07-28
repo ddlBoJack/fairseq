@@ -115,6 +115,19 @@ def get_annealed_rate(start, end, curr_step, total_steps):
     pct_remaining = 1 - curr_step / total_steps
     return end - r * pct_remaining
 
+def Embedding(num_embeddings, embedding_dim, padding_idx):
+    m = nn.Embedding(num_embeddings, embedding_dim, padding_idx=padding_idx)
+    nn.init.normal_(m.weight, mean=0, std=embedding_dim**-0.5)
+    nn.init.constant_(m.weight[padding_idx], 0)
+    return m
+
+def Linear(in_features, out_features, bias=True):
+    m = nn.Linear(in_features, out_features, bias)
+    nn.init.xavier_uniform_(m.weight)
+    if bias:
+        nn.init.constant_(m.bias, 0.0)
+    return m
+
 
 @register_model("data2vec_jt", dataclass=Data2VecJtConfig)
 class Data2VecJtModel(BaseFairseqModel):
@@ -183,7 +196,7 @@ class Data2VecJtModel(BaseFairseqModel):
             self.source_dictionary = task.source_dictionary
             self.target_dictionary = task.target_dictionary
 
-            self.text_embed_tokens = nn.Embedding(len(self.source_dictionary), cfg.text_embed_dim, self.source_dictionary.pad())
+            self.text_embed_tokens = Embedding(len(self.source_dictionary), cfg.text_embed_dim, self.source_dictionary.pad())
             self.text_embed_positions = PositionalEmbedding(
                 cfg.max_source_positions,
                 cfg.text_embed_dim,
@@ -193,7 +206,7 @@ class Data2VecJtModel(BaseFairseqModel):
             # self.text_dropout_module = nn.Dropout(cfg.text_dropout_input)
 
             self.text_post_extract_proj = nn.Linear(cfg.text_embed_dim, cfg.text_embed_dim)
-            self.text_proj_d = nn.Linear(cfg.text_embed_dim, len(self.target_dictionary))
+            self.text_proj_d = Linear(cfg.text_embed_dim, len(self.target_dictionary))
             self.text_encoder = TransformerEncoder4Text(cfg)
 
     def forward_embedding(self, src_tokens):
@@ -541,13 +554,16 @@ class Data2VecJtModel(BaseFairseqModel):
             scale = 1 / math.sqrt(sz)
         
         speech_loss = loss.sum() * scale
-        result["loss_speech"] = speech_loss
-        result["losses"]["regression"] = speech_loss
+        result["loss_speech"] = 0
+        result["losses"]["regression"] = 0
+        # if self.num_updates % 2 == 0:
+        #     logger.info(f"data2vec loss:{speech_loss}")
 
         if "sample_size" not in result:
             result["sample_size"] = loss.numel()
 
         # below are for text ctc loss
+        # if self.num_updates % 2 != 0 and self.num_updates >= self.cfg.ctc_start_step and source_label is not None and target_label is not None:
         if self.num_updates >= self.cfg.ctc_start_step and source_label is not None and target_label is not None:
             text_padding_mask = source_label.eq(self.source_dictionary.pad())
             has_pads = text_padding_mask.any()
@@ -561,7 +577,7 @@ class Data2VecJtModel(BaseFairseqModel):
             text_x, _ = self.text_encoder(
             text_x,
             padding_mask=text_padding_mask,
-            layer=None,
+            tgt_layer=None,
             )
             # share the same transformer with speech
             text_x, _ = self.encoder.forward_text(
@@ -570,6 +586,11 @@ class Data2VecJtModel(BaseFairseqModel):
             tgt_layer=None, 
             min_layer=12,
             start_layer=self.cfg.text_start_transformer_layer
+            )
+            text_x, _ = self.text_encoder.forward_final_transformer(
+            text_x,
+            padding_mask=text_padding_mask,
+            tgt_layer=None,
             )
             text_x = text_x.transpose(0, 1)
             text_x = self.text_proj_d(text_x)
@@ -605,9 +626,11 @@ class Data2VecJtModel(BaseFairseqModel):
                     zero_infinity=True,
                 )
             # ctc_loss = ctc_loss / target_lengths.sum().item()
-            ctc_loss = self.cfg.ctc_loss_alpha * ctc_loss * result["sample_size"]
-            result["ctc_loss"] =  ctc_loss
-            result["losses"]["regression"] = result["losses"]["regression"] + ctc_loss
+            ctc_loss = self.cfg.ctc_loss_alpha * ctc_loss
+            result["ctc_loss"] = ctc_loss
+            result["losses"]["regression"] = result["losses"]["regression"] + ctc_loss * result["sample_size"]
+            # result["losses"]["regression"] = ctc_loss
+            # logger.info(f"ctc loss:{ctc_loss}")
 
         with torch.no_grad():
             result["target_var"] = self.compute_var(y)

@@ -98,5 +98,5 @@ model:
   text_start_transformer_layer: 6
   text_transofmer_layers: 6
   text_dropout_input: 0.1
-  ctc_start_step: 10000
+  ctc_start_step: 50000
   ctc_loss_alpha: 0.01

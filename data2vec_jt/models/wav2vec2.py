@@ -956,11 +956,20 @@ class TransformerEncoder4Text(nn.Module):
         self.layer_norm_first = args.layer_norm_first
         self.layer_norm = LayerNorm(self.embedding_dim)
         self.layerdrop = args.encoder_layerdrop # v-ziyangma: skip training some layers if np.random.random() < layerdrop
+        self.final_transformer = self.build_encoder_layer(args)
 
         self.apply(init_bert_params)
 
-    def forward(self, x, padding_mask=None, layer=None):
-        x, layer_results = self.extract_features(x, padding_mask, layer)
+    def forward(self, x, padding_mask=None, tgt_layer=None):
+        x, layer_results = self.extract_features(x, padding_mask, tgt_layer=None, min_layer=0, last=False)
+
+        if self.layer_norm_first and layer is None:
+            x = self.layer_norm(x)
+
+        return x, layer_results
+    
+    def forward_final_transformer(self, x, padding_mask, tgt_layer=None):
+        x, layer_results = self.extract_features(x, padding_mask, tgt_layer=None, min_layer=0, last=True)
 
         if self.layer_norm_first and layer is None:
             x = self.layer_norm(x)
@@ -973,6 +982,7 @@ class TransformerEncoder4Text(nn.Module):
         padding_mask=None,
         tgt_layer=None,
         min_layer=0,
+        last=False,
     ):
 
         if padding_mask is not None:
@@ -999,17 +1009,24 @@ class TransformerEncoder4Text(nn.Module):
 
         layer_results = []
         r = None
-        for i, layer in enumerate(self.layers):
+        if last == True:
             dropout_probability = np.random.random() if self.layerdrop > 0 else 1
             if not self.training or (dropout_probability > self.layerdrop):
-                x, (z, lr) = layer(
+                x, (z, lr) = self.final_transformer(
                     x, self_attn_padding_mask=padding_mask, need_weights=False
-                ) # x:outputs z:attention(None) lr:layer_result after ffn for data2vec teacher
-                if i >= min_layer:
-                    layer_results.append((x, z, lr))
-            if i == tgt_layer:
-                r = x
-                break
+                )
+        else:
+            for i, layer in enumerate(self.layers):
+                dropout_probability = np.random.random() if self.layerdrop > 0 else 1
+                if not self.training or (dropout_probability > self.layerdrop):
+                    x, (z, lr) = layer(
+                        x, self_attn_padding_mask=padding_mask, need_weights=False
+                    ) # x:outputs z:attention(None) lr:layer_result after ffn for data2vec teacher
+                    if i >= min_layer:
+                        layer_results.append((x, z, lr))
+                if i == tgt_layer:
+                    r = x
+                    break
 
         if r is not None:
             x = r
