@@ -142,4 +142,4 @@ class Data2vecJtCriterion(FairseqCriterion):
         across workers prior to calling `reduce_metrics`. Setting this
         to True will improves distributed training speed.
         """
-        return True
+        return False

@@ -109,17 +109,9 @@ class Data2vevJtPretrainingConfig(AudioPretrainingConfig):
         default="phn",
         metadata={"help": "source dictionary type"}
     )
-    source_data: Optional[str] = field(
-        default=None,
-        metadata={"help": "source data file"}
-    )
     target_label: Optional[str] = field(
         default="ltr",
         metadata={"help": "target dictionary type"}
-    )
-    target_data: Optional[str] = field(
-        default=None,
-        metadata={"help": "source data file"}
     )
 
 @register_task("data2vec_jt_pretraining", dataclass=Data2vevJtPretrainingConfig)
@@ -160,8 +152,8 @@ class Data2vevJtPretrainingTask(AudioPretrainingTask):
             TextCompressionLevel, str(self.cfg.text_compression_level)
         )
         data_path = self.cfg.data
-        source_label_path = os.path.join(data_path, f"{task_cfg.source_data}.{task_cfg.source_label}")
-        target_label_path = os.path.join(data_path, f"{task_cfg.target_data}.{task_cfg.target_label}")
+        source_label_path = os.path.join(data_path, f"{split}.{task_cfg.source_label}")
+        target_label_path = os.path.join(data_path, f"{split}.{task_cfg.target_label}")
         skipped_indices = getattr(self.datasets[split], "skipped_indices", set())
         text_compressor = TextCompressor(level=text_compression_level)
         with open(source_label_path, "r") as f:

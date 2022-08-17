@@ -53,7 +53,7 @@ class Data2vecJtDataset(BaseWrapperDataset):
     def __getitem__(self, index):
         item = self.dataset[index]
         item["source_label"] = self.get_source_label(index, process_fn=self.process_source_label)
-        item["target_label"] = self.get_target_label(index, process_fn=self.process_source_label)
+        item["target_label"] = self.get_target_label(index, process_fn=self.process_target_label)
         return item
 
     def size(self, index):

@@ -20,12 +20,10 @@ task:
   normalize: true
 
   source_label: phn
-  source_data: ???
   target_label: ltr
-  target_data: ???
 
 dataset:
-  num_workers: 6
+  num_workers: 4
   max_tokens: 3800000
   skip_invalid_size_inputs_valid_test: true
   validate_interval: 5
@@ -36,7 +34,7 @@ dataset:
 
 distributed_training:
   distributed_world_size: 16
-  ddp_backend: legacy_ddp
+  ddp_backend: no_c10d
 
 criterion:
   _name: data2vec_jt_criterion
@@ -98,5 +96,5 @@ model:
   text_start_transformer_layer: 6
   text_transofmer_layers: 6
   text_dropout_input: 0.1
-  ctc_start_step: 50000
-  ctc_loss_alpha: 0.01
+  ctc_start_step: 0
+  ctc_loss_alpha: 0.1

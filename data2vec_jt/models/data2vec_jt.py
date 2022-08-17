@@ -554,8 +554,8 @@ class Data2VecJtModel(BaseFairseqModel):
             scale = 1 / math.sqrt(sz)
         
         speech_loss = loss.sum() * scale
-        result["loss_speech"] = 0
-        result["losses"]["regression"] = 0
+        result["loss_speech"] = speech_loss
+        result["losses"]["regression"] = speech_loss
         # if self.num_updates % 2 == 0:
         #     logger.info(f"data2vec loss:{speech_loss}")
 
@@ -565,6 +565,7 @@ class Data2VecJtModel(BaseFairseqModel):
         # below are for text ctc loss
         # if self.num_updates % 2 != 0 and self.num_updates >= self.cfg.ctc_start_step and source_label is not None and target_label is not None:
         if self.num_updates >= self.cfg.ctc_start_step and source_label is not None and target_label is not None:
+            #print(f"source_label: {self.source_dictionary.string(source_label[-1])}\n target label: {self.target_dictionary.string(target_label[-1])}\n")
             text_padding_mask = source_label.eq(self.source_dictionary.pad())
             has_pads = text_padding_mask.any()
             # self.check_label_range(source_label, self.source_dictionary)
@@ -696,10 +697,11 @@ class Data2VecJtModel(BaseFairseqModel):
         # remove text modules
         self.text_embed_tokens = None
         self.text_embed_positions = None
-        self.text_layernorm_embedding = None
-        self.text_dropout_module = None
+        # self.text_layernorm_embedding = None
+        # self.text_dropout_module = None
         self.text_post_extract_proj = None
         self.text_proj_d = None # TODO: what about init proj_d when finetuning with text_proj_d?
+        self.text_encoder = None
 
     def get_logits(self, logits, padding_mask, normalize=False):
         if padding_mask is not None and padding_mask.any():
