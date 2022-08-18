@@ -27,6 +27,7 @@ from fairseq import utils
 from fairseq.logging import metrics
 
 from ..data import Data2vecJtDataset
+from omegaconf import II
 
 
 logger = logging.getLogger(__name__)
@@ -113,6 +114,7 @@ class Data2vevJtPretrainingConfig(AudioPretrainingConfig):
         default="ltr",
         metadata={"help": "target dictionary type"}
     )
+    flag: Optional[str] = II("model.flag")
 
 @register_task("data2vec_jt_pretraining", dataclass=Data2vevJtPretrainingConfig)
 class Data2vevJtPretrainingTask(AudioPretrainingTask):
@@ -148,52 +150,53 @@ class Data2vevJtPretrainingTask(AudioPretrainingTask):
         super().load_dataset(split, task_cfg, **kwargs)
 
         task_cfg = task_cfg or self.cfg
-        text_compression_level = getattr(
-            TextCompressionLevel, str(self.cfg.text_compression_level)
-        )
-        data_path = self.cfg.data
-        source_label_path = os.path.join(data_path, f"{split}.{task_cfg.source_label}")
-        target_label_path = os.path.join(data_path, f"{split}.{task_cfg.target_label}")
-        skipped_indices = getattr(self.datasets[split], "skipped_indices", set())
-        text_compressor = TextCompressor(level=text_compression_level)
-        with open(source_label_path, "r") as f:
-            source_labels = [
-                text_compressor.compress(l)
-                for i, l in enumerate(f)
-                if i not in skipped_indices
-            ]
-        with open(target_label_path, "r") as f:
-            target_labels = [
-                text_compressor.compress(l)
-                for i, l in enumerate(f)
-                if i not in skipped_indices
-            ]
-        assert len(source_labels) == len(target_labels), (
-            f"source labels length ({len(source_labels)}) and target labels length "
-            f"({len(target_labels)}) do not match"
-        )
-        assert len(source_labels) == len(self.datasets[split]), (
-            f"labels length ({len(source_labels)}) and dataset length "
-            f"({len(self.datasets[split])}) do not match"
-        )
+        if task_cfg.flag == "jt":
+            text_compression_level = getattr(
+                TextCompressionLevel, str(self.cfg.text_compression_level)
+            )
+            data_path = self.cfg.data
+            source_label_path = os.path.join(data_path, f"{split}.{task_cfg.source_label}")
+            target_label_path = os.path.join(data_path, f"{split}.{task_cfg.target_label}")
+            skipped_indices = getattr(self.datasets[split], "skipped_indices", set())
+            text_compressor = TextCompressor(level=text_compression_level)
+            with open(source_label_path, "r") as f:
+                source_labels = [
+                    text_compressor.compress(l)
+                    for i, l in enumerate(f)
+                    if i not in skipped_indices
+                ]
+            with open(target_label_path, "r") as f:
+                target_labels = [
+                    text_compressor.compress(l)
+                    for i, l in enumerate(f)
+                    if i not in skipped_indices
+                ]
+            assert len(source_labels) == len(target_labels), (
+                f"source labels length ({len(source_labels)}) and target labels length "
+                f"({len(target_labels)}) do not match"
+            )
+            assert len(source_labels) == len(self.datasets[split]), (
+                f"labels length ({len(source_labels)}) and dataset length "
+                f"({len(self.datasets[split])}) do not match"
+            )
 
-        process_source_label = LabelEncoder(self.source_dictionary)
-        process_target_label = LabelEncoder(self.target_dictionary)
+            process_source_label = LabelEncoder(self.source_dictionary)
+            process_target_label = LabelEncoder(self.target_dictionary)
 
-        self.datasets[split] = Data2vecJtDataset(
-            self.datasets[split],
-            source_labels,
-            target_labels,
-            pad=self.target_dictionary.pad(),
-            eos=self.target_dictionary.eos(),
-            batch_sources=True,
-            batch_targets=True,
-            process_source_label=process_source_label,
-            process_target_label=process_target_label,
-            label_len_fn=label_len_fn,
-            add_to_input=task_cfg.get("autoregressive", False),
-            text_compression_level=text_compression_level,
-        )
+            self.datasets[split] = Data2vecJtDataset(
+                self.datasets[split],
+                source_labels,
+                target_labels,
+                pad=self.target_dictionary.pad(),
+                eos=self.target_dictionary.eos(),
+                batch_sources=True,
+                batch_targets=True,
+                process_source_label=process_source_label,
+                process_target_label=process_target_label,
+                label_len_fn=label_len_fn,
+                add_to_input=task_cfg.get("autoregressive", False),
+                text_compression_level=text_compression_level,
+            )
     
     @property
     def source_dictionary(self):

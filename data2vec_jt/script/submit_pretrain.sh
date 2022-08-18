@@ -6,10 +6,14 @@ export HYDRA_FULL_ERROR=1
 sudo `which pip` install wandb
 python -m wandb login a7e222c6124a8097a90dc62c0a5d3b8d27d17bfb
 
+ctc_start_step=$1
+ctc_end_step=$2
+ctc_loss_alpha=$3
+
 # edit your exp
 prefix_dir=/modelblob/users/v-ziyangma
 model_name=data2vec_jt
-exp_name=data2vec_jt_960h_960h_6text_6share_1add_0kstart_01ctc
+exp_name=data2vec_jt_960h_960h_6text_6share_1add_${ctc_start_step}start_${ctc_end_step}end_${ctc_loss_alpha}ctc
 
 # edit your config
 config_dir=./data2vec_jt/config/pretraining
@@ -22,7 +26,7 @@ valid_subset=val_10
 
 # edit your compute resource
 # distributed_world_size=16
-update_freq=[4]
+update_freq=[8]
 max_tokens=700000
 
 # edit your ckpt
@@ -52,6 +56,9 @@ checkpoint.keep_interval_updates=40 \
 checkpoint.save_interval_updates=10000 \
 common.wandb_project=data2vec_jt \
 common.user_dir=data2vec_jt \
+model.ctc_start_step=${ctc_start_step} \
+model.ctc_end_step=${ctc_end_step} \
+model.ctc_loss_alpha=${ctc_loss_alpha} \
 # distributed_training.distributed_world_size=${distributed_world_size}  \
 # checkpoint.reset_dataloader=true \
 # common.tensorboard_logdir=${tb_path} \

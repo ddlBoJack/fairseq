@@ -4,8 +4,6 @@ common:
   fp16: true
   log_format: json
   log_interval: 200
-  tensorboard_logdir: ???
-  wandb_project: ???
 
 checkpoint:
   save_interval: 5
@@ -93,6 +91,7 @@ model:
   require_same_masks: true
   mask_dropout: 0
 
+  flag: jt # data2vec, jt
   # below are for text
   text_embed_dim: 768
   max_source_positions: 1800 # TODO: max length in train_960.phn is 1486, max length in dev_clean.phn is 1631
@@ -100,4 +99,5 @@ model:
   text_transofmer_layers: 6
   text_dropout_input: 0.1
   ctc_start_step: 0
+  ctc_end_step: 400000
   ctc_loss_alpha: 0.01

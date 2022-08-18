@@ -85,6 +85,10 @@ class Data2VecJtConfig(Wav2Vec2Config):
         metadata={"help": "stop training if prediction var falls below this"},
     )
 
+    flag: Optional[str] = field(
+        default=None,
+        metadata={"help": "flag to origin version of data2vec or other"}
+    )
     # below are for text(equal to encoder_embed_dim in this version)
     text_embed_dim: int = field(
         default=768, metadata={"help": "embedding dim for text"}
@@ -103,6 +107,9 @@ class Data2VecJtConfig(Wav2Vec2Config):
     )
     ctc_start_step: int = field(
         default=0, metadata={"help": "which step to start ctc loss"}
+    )
+    ctc_end_step: int = field(
+        default=400000, metadata={"help": "which step to end ctc loss"}
     )
     ctc_loss_alpha: float = field(
         default=1, metadata={"help": "weight for ctc loss"}
@@ -188,7 +195,7 @@ class Data2VecJtModel(BaseFairseqModel):
 
         # below are for text module
         # self.task = task
-        if task.__class__.__name__ == "Data2vevJtPretrainingTask":
+        if cfg.flag == "jt":
             self.blank_idx = (
                 task.target_dictionary.index(task.blank_symbol)
                 if hasattr(task, "blank_symbol")
@@ -564,7 +571,7 @@ class Data2VecJtModel(BaseFairseqModel):
 
         # below are for text ctc loss
         # if self.num_updates % 2 != 0 and self.num_updates >= self.cfg.ctc_start_step and source_label is not None and target_label is not None:
-        if self.num_updates >= self.cfg.ctc_start_step and source_label is not None and target_label is not None:
+        if self.cfg.flag == "jt" and self.num_updates >= self.cfg.ctc_start_step and self.num_updates < self.cfg.ctc_end_step and source_label is not None and target_label is not None:
             #print(f"source_label: {self.source_dictionary.string(source_label[-1])}\n target label: {self.target_dictionary.string(target_label[-1])}\n")
             text_padding_mask = source_label.eq(self.source_dictionary.pad())
             has_pads = text_padding_mask.any()

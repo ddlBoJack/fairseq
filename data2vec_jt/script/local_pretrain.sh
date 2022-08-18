@@ -19,7 +19,7 @@ valid_subset=val_10
 
 # edit your compute resource
 distributed_world_size=1
-update_freq=[16]
+update_freq=[4]
 max_tokens=600000
 
 # edit your ckpt
@@ -50,9 +50,10 @@ optimization.update_freq=${update_freq} \
 dataset.max_tokens=${max_tokens} \
 common.user_dir=data2vec_jt \
 common.log_interval=1 \
-checkpoint.save_interval_updates=1000 \
+checkpoint.save_interval_updates=10 \
 dataset.num_workers=1 \
 common.wandb_project=debug \
+# checkpoint.restore_file="checkpoint_last.pt" \
 # common.tensorboard_logdir=${tb_path} \
 # common.log_file=${log_file}  \
 # checkpoint.reset_dataloader=true \
