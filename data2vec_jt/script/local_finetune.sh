@@ -26,9 +26,9 @@ max_tokens=1600000
 model_path=/home/v-ziyangma/model/data2vec_jt/pretrain_debug/checkpoint_1_10.pt
 
 #edit your log: !!too slow to write to datablob!!
-tb_path=${prefix_dir}/log/${model_name}/${exp_name}/tensorboard
+tb_path=~/log/${model_name}/${exp_name}/tensorboard
 mkdir -p ${tb_path}
-log_file=${prefix_dir}/log/${model_name}/${exp_name}/hydra_train.log
+log_file=~/log/${model_name}/${exp_name}/hydra_train.log
 
 # set finetune output model
 finetuning_output_dir=~/log/${model_name}/${exp_name}/${train_subset}_${valid_subset}
@@ -58,6 +58,7 @@ dataset.validate_after_updates=10 \
 dataset.validate_interval_updates=10 \
 common.wandb_project=debug \
 common.user_dir=data2vec_jt \
+model._name=data2vec_jt_ctc \
 # common.tensorboard_logdir=${tb_path} \
 # common.log_file=${log_file}  \
 # checkpoint.reset_dataloader=true \

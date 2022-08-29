@@ -5,8 +5,6 @@
 # the root directory of this source tree. An additional grant of patent rights
 # can be found in the PATENTS file in the same directory.
 
-# v-ziyangma: edit from fairseq/tasks/audio_pretraining.py
-
 import logging
 import os
 import torch
@@ -25,9 +23,6 @@ from fairseq.data.text_compressor import TextCompressor, TextCompressionLevel
 from fairseq.tasks import register_task
 from fairseq import utils
 from fairseq.logging import metrics
-
-from ..data import Data2vecJtDataset
-from omegaconf import II
 
 
 logger = logging.getLogger(__name__)
@@ -48,7 +43,7 @@ def label_len_fn(label):
 
 
 @dataclass
-class Data2vevJtPretrainingConfig(AudioPretrainingConfig):
+class Multi2VecPretrainingConfig(AudioPretrainingConfig):
     # Options for reporting WER metrics during validation. Only applicable to
     # Seq2Seq models during fine-tuning
     eval_wer: bool = field(
@@ -106,106 +101,67 @@ class Data2vevJtPretrainingConfig(AudioPretrainingConfig):
         },
     )
 
-    source_label: Optional[str] = field(
-        default="phn",
-        metadata={"help": "source dictionary type"}
-    )
-    target_label: Optional[str] = field(
-        default="ltr",
-        metadata={"help": "target dictionary type"}
-    )
-    text_ctc: Optional[bool] = II("model.text_ctc")
 
-@register_task("data2vec_jt_pretraining", dataclass=Data2vevJtPretrainingConfig)
-class Data2vevJtPretrainingTask(AudioPretrainingTask):
+@register_task("multi2vec_pretraining", dataclass=Multi2VecPretrainingConfig)
+class Multi2VecPretrainingTask(AudioPretrainingTask):
     """ """
 
-    cfg: Data2vevJtPretrainingConfig
+    cfg: Multi2VecPretrainingConfig
 
     def __init__(
         self,
-        cfg: Data2vevJtPretrainingConfig,
+        cfg: Multi2VecPretrainingConfig,
     ):
         super().__init__(cfg)
         self.blank_symbol = "<s>"
 
-        self.state.add_factory("source_dictionary", self.load_source_dictionary)
         self.state.add_factory("target_dictionary", self.load_target_dictionary)
-    
-    def load_source_dictionary(self):
-        try: # avoid loading source dictionary when finetuning
-            if self.cfg.source_label:
-                dict_path = os.path.join(self.cfg.data, f"dict.{self.cfg.source_label}.txt")
-                return Dictionary.load(dict_path)
-        except:
-            pass
-        return None
 
     def load_target_dictionary(self):
-        if self.cfg.target_label:
-            dict_path = os.path.join(self.cfg.data, f"dict.{self.cfg.target_label}.txt")
+        if self.cfg.labels:
+            dict_path = os.path.join(self.cfg.data, f"dict.{self.cfg.labels}.txt")
             return Dictionary.load(dict_path)
         return None
 
     def load_dataset(
-        self, split: str, task_cfg: Data2vevJtPretrainingConfig = None, **kwargs
+        self, split: str, task_cfg: Multi2VecPretrainingConfig = None, **kwargs
     ):
         super().load_dataset(split, task_cfg, **kwargs)
 
         task_cfg = task_cfg or self.cfg
-        if task_cfg.text_ctc:
-            text_compression_level = getattr(
-                TextCompressionLevel, str(self.cfg.text_compression_level)
-            )
-            data_path = self.cfg.data
-            source_label_path = os.path.join(data_path, f"{split}.{task_cfg.source_label}")
-            target_label_path = os.path.join(data_path, f"{split}.{task_cfg.target_label}")
-            skipped_indices = getattr(self.datasets[split], "skipped_indices", set())
-            text_compressor = TextCompressor(level=text_compression_level)
-            with open(source_label_path, "r") as f:
-                source_labels = [
-                    text_compressor.compress(l)
-                    for i, l in enumerate(f)
-                    if i not in skipped_indices
-                ]
-            with open(target_label_path, "r") as f:
-                target_labels = [
-                    text_compressor.compress(l)
-                    for i, l in enumerate(f)
-                    if i not in skipped_indices
-                ]
-            assert len(source_labels) == len(target_labels), (
-                f"source labels length ({len(source_labels)}) and target labels length "
-                f"({len(target_labels)}) do not match"
-            )
-            assert len(source_labels) == len(self.datasets[split]), (
-                f"labels length ({len(source_labels)}) and dataset length "
-                f"({len(self.datasets[split])}) do not match"
-            )
+        assert task_cfg.labels is not None
+        text_compression_level = getattr(
+            TextCompressionLevel, str(self.cfg.text_compression_level)
+        )
+        data_path = self.cfg.data
+        label_path = os.path.join(data_path, f"{split}.{task_cfg.labels}")
+        skipped_indices = getattr(self.datasets[split], "skipped_indices", set())
+        text_compressor = TextCompressor(level=text_compression_level)
+        with open(label_path, "r") as f:
+            labels = [
+                text_compressor.compress(l)
+                for i, l in enumerate(f)
+                if i not in skipped_indices
+            ]
 
-            process_source_label = LabelEncoder(self.source_dictionary)
-            process_target_label = LabelEncoder(self.target_dictionary)
+        assert len(labels) == len(self.datasets[split]), (
+            f"labels length ({len(labels)}) and dataset length "
+            f"({len(self.datasets[split])}) do not match"
+        )
 
-            self.datasets[split] = Data2vecJtDataset(
-                self.datasets[split],
-                source_labels,
-                target_labels,
-                pad=self.target_dictionary.pad(),
-                eos=self.target_dictionary.eos(),
-                batch_sources=True,
-                batch_targets=True,
-                process_source_label=process_source_label,
-                process_target_label=process_target_label,
-                label_len_fn=label_len_fn,
-                add_to_input=task_cfg.get("autoregressive", False),
-                text_compression_level=text_compression_level,
-            )
-    
-    @property
-    def source_dictionary(self):
-        """Return the :class:`~fairseq.data.Dictionary` for the language
-        model."""
-        return self.state.source_dictionary
+        process_label = LabelEncoder(self.target_dictionary)
+
+        self.datasets[split] = AddTargetDataset(
+            self.datasets[split],
+            labels,
+            pad=self.target_dictionary.pad(),
+            eos=self.target_dictionary.eos(),
+            batch_targets=True,
+            process_label=process_label,
+            label_len_fn=label_len_fn,
+            add_to_input=task_cfg.get("autoregressive", False),
+            text_compression_level=text_compression_level,
+        )
 
     @property
     def target_dictionary(self):

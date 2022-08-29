@@ -8,14 +8,14 @@ python -m wandb login a7e222c6124a8097a90dc62c0a5d3b8d27d17bfb
 prefix_dir=/modelblob/users/v-ziyangma
 prefix_dir_wcy=/modelblob/users/v-chengw
 model_name=data2vec_uni
-exp_name=data2vec_uni_100h_860h_fromScatch_190w_textLoss01_finetune_beta0
+exp_name=data2vec_uni_100h_860h_align_phn1_280w_2x32G8_beta0_finetune
 
 #edit your config
 config_dir=./data2vec_uni/config/joint
 config_name=base_100h
 
 #edit your data
-data_path=${prefix_dir_wcy}/data/librispeech/manifest/resource/
+data_path=${prefix_dir}/data/manifest/resource/
 # data_path=${prefix_dir}/data/manifest/finetuning/
 train_subset=train_clean_100
 valid_subset=dev_other
@@ -26,9 +26,8 @@ update_freq=[1]
 max_tokens=3200000
 
 #edit your pretrained model
-checkpoint=checkpoint_207_200000
-model_path=${prefix_dir}/model/${model_name}/data2vec_uni_100h_860h_fromScatch_190w_32G8_textLoss01_beta0/${checkpoint}.pt
-
+checkpoint=checkpoint_156_200000
+model_path=${prefix_dir}/model/${model_name}/data2vec_uni_100h_860h_align_phn1_380w_2x32G8_beta0/${checkpoint}.pt
 #edit your log: !!too slow to write to datablob!!
 # tb_path=${prefix_dir}/log/${model_name}/${exp_name}/tensorboard
 # mkdir -p ${tb_path}
@@ -36,7 +35,7 @@ model_path=${prefix_dir}/model/${model_name}/data2vec_uni_100h_860h_fromScatch_1
 # tb_path=$AZUREML_TB_PATH
 
 # set finetune output model
-finetuning_output_dir=${prefix_dir}/model/${model_name}/${exp_name}/${checkpoint}_${train_subset}_${valid_subset}_viterbi_textLoss01_beta0
+finetuning_output_dir=${prefix_dir}/model/${model_name}/${exp_name}/${checkpoint}_${train_subset}_${valid_subset}_viterbi_alignPhn1_beta0
 # mkdir -p ${finetuning_output_dir}
 
 kenlm_model_path=${prefix_dir}/model/language_model/4-gram.bin

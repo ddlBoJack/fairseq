@@ -30,8 +30,8 @@ mkdir -p ${tb_path}
 log_file=~/log/${model_name}/${exp_name}/hydra_train.log
 
 # pretrain
-# python -m debugpy --listen 5678 --wait-for-client fairseq_cli/hydra_train.py  \
-python fairseq_cli/hydra_train.py -m \
+# python fairseq_cli/hydra_train.py -m \
+python -m debugpy --listen 5678 --wait-for-client fairseq_cli/hydra_train.py  \
 --config-dir ${config_dir}  \
 --config-name ${config_name}  \
 task.data=${data_path}  \

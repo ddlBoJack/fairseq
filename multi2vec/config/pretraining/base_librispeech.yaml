@@ -13,37 +13,30 @@ checkpoint:
   no_epoch_checkpoints: true
 
 task:
-  _name: data2vec_jt_pretraining
+  _name: audio_pretraining
   data: ???
   max_sample_size: 320000
   min_sample_size: 32000
   normalize: true
 
-  source_label: phn
-  target_label: ltr
-
 dataset:
-  num_workers: 4
+  num_workers: 6
   max_tokens: 3800000
   skip_invalid_size_inputs_valid_test: true
   validate_interval: 5
   required_batch_size_multiple: 1
   disable_validation: true
-  train_subset: test-clean
-  valid_subset: test-clean
 
 distributed_training:
   distributed_world_size: 16
-  ddp_backend: no_c10d
+  ddp_backend: legacy_ddp
 
 criterion:
-  _name: data2vec_jt_criterion
+  _name: model
   log_keys:
     - ema_decay
     - target_var
     - pred_var
-    - loss_speech
-    - ctc_loss
 
 optimization:
   max_update: 400000
@@ -61,7 +54,7 @@ lr_scheduler:
   phase_ratio: [0.03,0.9,0.07]
 
 model:
-  _name: data2vec_jt
+  _name: data2vec_audio
   extractor_mode: layer_norm
   encoder_layerdrop: 0.05
   dropout_input: 0.0
@@ -89,14 +82,3 @@ model:
 
   require_same_masks: true
   mask_dropout: 0
-
-  # below are for text
-  text_ctc: true
-  text_embed_dim: 768
-  max_source_positions: 1800 # TODO: max length in train_960.phn is 1486, max length in dev_clean.phn is 1631
-  text_start_transformer_layer: 6
-  text_transofmer_layers: 6
-  text_dropout_input: 0.1
-  ctc_start_step: 0
-  ctc_end_step: 400000
-  ctc_loss_alpha: 0.1

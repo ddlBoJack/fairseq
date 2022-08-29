@@ -15,28 +15,26 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributed as dist
 
-from fairseq.modules import EMAModule, EMAModuleConfig, PositionalEmbedding, FairseqDropout
+from fairseq.modules import EMAModule, EMAModuleConfig
 from fairseq.data.data_utils import compute_mask_indices
 from fairseq.models import BaseFairseqModel, register_model
-from .wav2vec2 import (
+from fairseq.models.wav2vec import (
     ConvFeatureExtractionModel,
     Wav2Vec2Config,
     TransformerEncoder,
-    TransformerEncoder4Text,
 )
 from fairseq.modules import (
     GradMultiply,
     LayerNorm,
 )
 from fairseq.utils import index_put
-from fairseq import utils
 
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class Data2VecJtConfig(Wav2Vec2Config):
+class Multi2VecConfig(Wav2Vec2Config):
 
     loss_beta: float = field(
         default=0, metadata={"help": "beta for smooth l1 loss. 0 means use l2 loss"}
@@ -85,60 +83,16 @@ class Data2VecJtConfig(Wav2Vec2Config):
         metadata={"help": "stop training if prediction var falls below this"},
     )
 
-    text_ctc: Optional[bool] = field(
-        default=False,
-        metadata={"help": "whether to use ctc loss for text"},
-    )
-    # below are for text(equal to encoder_embed_dim in this version)
-    text_embed_dim: int = field(
-        default=768, metadata={"help": "embedding dim for text"}
-    )
-    max_source_positions: int = field(
-        default=1024, metadata={"help": "max source sequence length"}
-    )
-    text_start_transformer_layer: int = field(
-        default=0, metadata={"help": "which transformer layer to start loss for text"}
-    )
-    text_transofmer_layers: int = field(
-        default=6, metadata={"help": "how many transformer layers to use for text"}
-    )
-    text_dropout_input: float = field(
-        default=0, metadata={"help": "text input dropout"}
-    )
-    ctc_start_step: int = field(
-        default=0, metadata={"help": "which step to start ctc loss"}
-    )
-    ctc_end_step: int = field(
-        default=400000, metadata={"help": "which step to end ctc loss"}
-    )
-    ctc_loss_alpha: float = field(
-        default=1, metadata={"help": "weight for ctc loss"}
-    )
-
-
 
 def get_annealed_rate(start, end, curr_step, total_steps):
     r = end - start
     pct_remaining = 1 - curr_step / total_steps
     return end - r * pct_remaining
 
-def Embedding(num_embeddings, embedding_dim, padding_idx):
-    m = nn.Embedding(num_embeddings, embedding_dim, padding_idx=padding_idx)
-    nn.init.normal_(m.weight, mean=0, std=embedding_dim**-0.5)
-    nn.init.constant_(m.weight[padding_idx], 0)
-    return m
 
-def Linear(in_features, out_features, bias=True):
-    m = nn.Linear(in_features, out_features, bias)
-    nn.init.xavier_uniform_(m.weight)
-    if bias:
-        nn.init.constant_(m.bias, 0.0)
-    return m
-
-
-@register_model("data2vec_jt", dataclass=Data2VecJtConfig)
-class Data2VecJtModel(BaseFairseqModel):
-    def __init__(self, cfg: Data2VecJtConfig, task=None):
+@register_model("multi2vec", dataclass=Multi2VecConfig)
+class Multi2VecModel(BaseFairseqModel):
+    def __init__(self, cfg: Multi2VecConfig):
         super().__init__()
         self.cfg = cfg
 
@@ -192,35 +146,6 @@ class Data2VecJtModel(BaseFairseqModel):
         self.final_proj = nn.Linear(self.embed, self.embed) # v-ziyangma: p768 -> 768
 
         self.num_updates = 0
-
-        # below are for text module
-        # self.task = task
-        if cfg.text_ctc:
-            self.blank_idx = (
-                task.target_dictionary.index(task.blank_symbol)
-                if hasattr(task, "blank_symbol")
-                else 0)
-            self.source_dictionary = task.source_dictionary
-            self.target_dictionary = task.target_dictionary
-
-            self.text_embed_tokens = Embedding(len(self.source_dictionary), cfg.text_embed_dim, self.source_dictionary.pad())
-            self.text_embed_positions = PositionalEmbedding(
-                cfg.max_source_positions,
-                cfg.text_embed_dim,
-                self.source_dictionary.pad(),
-                learned=True)
-            # self.text_layernorm_embedding = LayerNorm(cfg.text_embed_dim)
-            # self.text_dropout_module = nn.Dropout(cfg.text_dropout_input)
-
-            self.text_post_extract_proj = nn.Linear(cfg.text_embed_dim, cfg.text_embed_dim)
-            self.text_proj_d = Linear(cfg.text_embed_dim, len(self.target_dictionary))
-            self.text_encoder = TransformerEncoder4Text(cfg)
-
-    def forward_embedding(self, src_tokens):
-        x = self.text_embed_tokens(src_tokens) + self.text_embed_positions(src_tokens)
-        # x = self.text_layernorm_embedding(x)
-        # x = self.text_dropout_module(x)
-        return x
 
     def make_ema_teacher(self):
         # v-ziyangma: "We found it more efficient and slightly more accurate to share the parameters of the feature encoder and the positional encoder between the teacher and student networks."
@@ -291,10 +216,10 @@ class Data2VecJtModel(BaseFairseqModel):
         return super()._load_from_state_dict(state_dict, prefix, *args, **kwargs)
 
     @classmethod
-    def build_model(cls, cfg: Data2VecJtConfig, task=None):
+    def build_model(cls, cfg: Multi2VecConfig, task=None):
         """Build a new model instance."""
 
-        return cls(cfg, task)
+        return cls(cfg)
 
     def apply_mask(
         self,
@@ -386,8 +311,6 @@ class Data2VecJtModel(BaseFairseqModel):
     def forward(
         self,
         source,
-        source_label=None,
-        target_label=None,
         padding_mask=None,
         mask=True,
         features_only=False,
@@ -544,7 +467,7 @@ class Data2VecJtModel(BaseFairseqModel):
             y = y[mask_indices] # v-ziyangma: total_length x feature_dim
 
         x = x[mask_indices]
-        x = self.final_proj(x)
+        x = self.final_proj(x) # v-ziyangma: WHY final_proj?
 
         sz = x.size(-1)
 
@@ -559,86 +482,11 @@ class Data2VecJtModel(BaseFairseqModel):
             scale = self.loss_scale
         else:
             scale = 1 / math.sqrt(sz)
-        
-        speech_loss = loss.sum() * scale
-        result["loss_speech"] = speech_loss
-        result["losses"]["regression"] = speech_loss
-        # if self.num_updates % 2 == 0:
-        #     logger.info(f"data2vec loss:{speech_loss}")
+
+        result["losses"]["regression"] = loss.sum() * scale
 
         if "sample_size" not in result:
             result["sample_size"] = loss.numel()
-
-        # below are for text ctc loss
-        # if self.num_updates % 2 != 0 and self.num_updates >= self.cfg.ctc_start_step and source_label is not None and target_label is not None:
-        if self.cfg.text_ctc and self.num_updates >= self.cfg.ctc_start_step and self.num_updates < self.cfg.ctc_end_step and source_label is not None and target_label is not None:
-            #print(f"source_label: {self.source_dictionary.string(source_label[-1])}\n target label: {self.target_dictionary.string(target_label[-1])}\n")
-            text_padding_mask = source_label.eq(self.source_dictionary.pad())
-            has_pads = text_padding_mask.any()
-            # self.check_label_range(source_label, self.source_dictionary)
-            text_x = self.forward_embedding(source_label)
-            if has_pads:
-                text_x = text_x * (1 - text_padding_mask.unsqueeze(-1).type_as(text_x))
-            text_x = self.text_post_extract_proj(text_x)
-            
-            # text encoder
-            text_x, _ = self.text_encoder(
-            text_x,
-            padding_mask=text_padding_mask,
-            tgt_layer=None,
-            )
-            # share the same transformer with speech
-            text_x, _ = self.encoder.forward_text(
-            text_x,
-            padding_mask=text_padding_mask,
-            tgt_layer=None, 
-            min_layer=12,
-            start_layer=self.cfg.text_start_transformer_layer
-            )
-            text_x, _ = self.text_encoder.forward_final_transformer(
-            text_x,
-            padding_mask=text_padding_mask,
-            tgt_layer=None,
-            )
-            text_x = text_x.transpose(0, 1)
-            text_x = self.text_proj_d(text_x)
-            
-            # comute ctc loss
-            lprobs = self.get_normalized_probs(
-            text_x, 
-            text_padding_mask,
-            log_probs=True
-            ).contiguous()  # (T, B, C) from the encoder
-            
-            if text_padding_mask is not None:
-                non_padding_mask = ~text_padding_mask
-                source_lengths = non_padding_mask.long().sum(-1)
-            else:
-                source_lengths = lprobs.new_full(
-                    (lprobs.size(1),), lprobs.size(0), dtype=torch.long
-                )
-            
-            target_pad_mask = (target_label != self.target_dictionary.pad()) & (target_label != self.target_dictionary.eos())
-            targets_flat = target_label.masked_select(target_pad_mask)
-            target_lengths = target_pad_mask.sum(-1)
-            
-            # with torch.backends.cudnn.flags(enabled=False):
-            with torch.backends.cudnn.flags(deterministic=True):
-                ctc_loss = F.ctc_loss(
-                    lprobs,
-                    targets_flat,
-                    source_lengths,
-                    target_lengths,
-                    blank=self.blank_idx,
-                    reduction="mean",
-                    zero_infinity=True,
-                )
-            # ctc_loss = ctc_loss / target_lengths.sum().item()
-            ctc_loss = self.cfg.ctc_loss_alpha * ctc_loss
-            result["ctc_loss"] = ctc_loss
-            result["losses"]["regression"] = result["losses"]["regression"] + ctc_loss * result["sample_size"]
-            # result["losses"]["regression"] = ctc_loss
-            # logger.info(f"ctc loss:{ctc_loss}")
 
         with torch.no_grad():
             result["target_var"] = self.compute_var(y)
@@ -700,48 +548,3 @@ class Data2VecJtModel(BaseFairseqModel):
             self.encoder.layers = nn.ModuleList(
                 l for i, l in enumerate(self.encoder.layers) if i <= last_layer
             )
-        
-        # remove text modules
-        self.text_embed_tokens = None
-        self.text_embed_positions = None
-        # self.text_layernorm_embedding = None
-        # self.text_dropout_module = None
-        self.text_post_extract_proj = None
-        self.text_proj_d = None # TODO: what about init proj_d when finetuning with text_proj_d?
-        self.text_encoder = None
-
-    def get_logits(self, logits, padding_mask, normalize=False):
-        if padding_mask is not None and padding_mask.any():
-            number_of_classes = logits.size(-1)
-            masking_tensor = torch.ones(
-                number_of_classes, device=logits.device
-            ) * float("-inf")
-            masking_tensor[0] = 0
-            logits[padding_mask.T] = masking_tensor.type_as(logits)
-
-        if normalize:
-            logits = utils.log_softmax(logits.float(), dim=-1)
-
-        return logits
-
-    def get_normalized_probs(self, logits, padding_mask, log_probs):
-        """Get normalized probabilities (or log probs) from a net's output."""
-
-        logits = self.get_logits(logits, padding_mask)
-
-        if log_probs:
-            return utils.log_softmax(logits.float(), dim=-1)
-        else:
-            return utils.softmax(logits.float(), dim=-1) 
-
-    def check_label_range(self, label, dictionary):
-        maxx = label.max().item()
-        print(f"max label is {maxx}")
-        minn = label.min().item()
-        print(f"min label is {minn}")
-        for line in label:
-            for token in line:
-                if token not in range(len(dictionary)):
-                    raise Exception(
-                        f"Token {token} not in dictionary {dictionary}"
-                    )

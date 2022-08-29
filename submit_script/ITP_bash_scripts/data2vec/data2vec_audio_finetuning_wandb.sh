@@ -27,7 +27,7 @@ update_freq=[1]
 max_tokens=3200000
 
 #edit your pretrained model
-checkpoint=checkpoint_5243_110000
+checkpoint=checkpoint_9532_200000
 
 kenlm_model_path=${prefix_dir}/model/language_model/4-gram.bin
 lexicon_path=${prefix_dir}/model/language_model/librispeech_lexicon.lst
@@ -40,7 +40,7 @@ lexicon_path=${prefix_dir}/model/language_model/librispeech_lexicon.lst
 model_path=/datablob/users/v-ziyangma/model/data2vec/data2vec_dev_test_32G8_380w/${checkpoint}.pt
 
 # set finetune output model
-finetuning_output_dir=${prefix_dir}/model/${model_name}/${exp_name}/data2vec_dev_test_32G8_380w/${checkpoint}_${train_subset}_${valid_subset}_dev&test_viterbi
+finetuning_output_dir=${prefix_dir}/model/${model_name}/${exp_name}/data2vec_dev_test_32G8_380w/${checkpoint}_${train_subset}_${valid_subset}_dev_test_4gram
 # mkdir -p ${finetuning_output_dir}
 
 echo "Start finetuning!!!"
@@ -60,10 +60,10 @@ optimization.update_freq=${update_freq} \
 dataset.max_tokens=${max_tokens}  \
 task.normalize=true \
 common.wandb_project=data2vec_baseline \
-# +criterion.wer_kenlm_model=${kenlm_model_path}  \
-# +criterion.wer_lexicon=${lexicon_path}  \
-# +criterion.wer_lm_weight=2 \
-# +criterion.wer_word_score=-1 \
++criterion.wer_kenlm_model=${kenlm_model_path}  \
++criterion.wer_lexicon=${lexicon_path}  \
++criterion.wer_lm_weight=2 \
++criterion.wer_word_score=-1 \
 # hydra.run.dir=${finetuning_output_dir} \
 # common.log_file=${log_file}  \
 # common.tensorboard_logdir=$AZUREML_TB_PATH \

@@ -1,0 +1,145 @@
+hydra:
+  run:
+    dir: ???
+  sweep:
+    dir: ???
+    subdir: ${hydra.job.config_name}__${hydra.job.override_dirname}
+  hydra_logging:
+    version: 1
+    formatters:
+      simple:
+        format: '[%(asctime)s][HYDRA] %(message)s'
+    handlers:
+      console:
+        class: logging.StreamHandler
+        formatter: simple
+        stream: ext://sys.stdout
+    root:
+      level: INFO
+      handlers:
+      - console
+    loggers:
+      logging_example:
+        level: DEBUG
+    disable_existing_loggers: false
+  job_logging:
+    version: 1
+    formatters:
+      simple:
+        format: '[%(asctime)s][%(name)s][%(levelname)s] - %(message)s'
+    handlers:
+      console:
+        class: logging.StreamHandler
+        formatter: simple
+        stream: ext://sys.stdout
+      file:
+        class: logging.FileHandler
+        formatter: simple
+        filename: ${hydra.job.name}.log
+    root:
+      level: INFO
+      handlers:
+      - console
+      - file
+    disable_existing_loggers: false
+  sweeper:
+    _target_: hydra._internal.core_plugins.basic_sweeper.BasicSweeper
+    max_batch_size: null
+  launcher:
+    _target_: hydra._internal.core_plugins.basic_launcher.BasicLauncher
+  help:
+    app_name: ${hydra.job.name}
+    header: '${hydra.help.app_name} is powered by Hydra.
+
+      '
+    footer: 'Powered by Hydra (https://hydra.cc)
+
+      Use --hydra-help to view Hydra specific help
+
+      '
+    template: '${hydra.help.header}
+
+      == Configuration groups ==
+
+      Compose your configuration from those groups (group=option)
+
+
+      $APP_CONFIG_GROUPS
+
+
+      == Config ==
+
+      Override anything in the config (foo.bar=value)
+
+
+      $CONFIG
+
+
+      ${hydra.help.footer}
+
+      '
+  hydra_help:
+    hydra_help: ???
+    template: 'Hydra (${hydra.runtime.version})
+
+      See https://hydra.cc for more info.
+
+
+      == Flags ==
+
+      $FLAGS_HELP
+
+
+      == Configuration groups ==
+
+      Compose your configuration from those groups (For example, append hydra/job_logging=disabled
+      to command line)
+
+
+      $HYDRA_CONFIG_GROUPS
+
+
+      Use ''--cfg hydra'' to Show the Hydra config.
+
+      '
+  output_subdir: .hydra
+  overrides:
+    hydra: []
+    task:
+    - task.data=/home/v-ziyangma/data/LibriSpeech/manifest/resource
+    - dataset.train_subset=dev_clean
+    - dataset.valid_subset=dev_clean
+    - task.label_dir=/home/v-ziyangma/data/LibriSpeech/manifest/resource
+    - task.labels=["km"]
+    - model.label_rate=50
+    - checkpoint.save_dir=/home/v-ziyangma/model/multi2vec/pretrain_debug
+    - distributed_training.distributed_world_size=1
+    - optimization.update_freq=[2]
+    - dataset.max_tokens=700000
+    - common.log_interval=1
+    - checkpoint.save_interval_updates=10
+    - dataset.num_workers=1
+    - common.wandb_project=debug
+    - common.user_dir=multi2vec
+    - task._name=multi2vec_pretraining
+    - model._name=multi2vec
+  job:
+    name: hydra_train
+    override_dirname: checkpoint.save_dir-/home/v-ziyangma/model/multi2vec/pretrain_debug__checkpoint.save_interval_updates-10__common.log_interval-1__common.user_dir-multi2vec__common.wandb_project-debug__dataset.max_tokens-700000__dataset.num_workers-1__dataset.train_subset-dev_clean__dataset.valid_subset-dev_clean__distributed_training.distributed_world_size-1__model._name-multi2vec__model.label_rate-50__optimization.update_freq-[2]__task._name-multi2vec_pretraining__task.labels-["km"]
+    id: ???
+    num: ???
+    config_name: hubert_base_librispeech
+    env_set: {}
+    env_copy: []
+    config:
+      override_dirname:
+        kv_sep: '-'
+        item_sep: __
+        exclude_keys:
+        - run
+        - task.data
+        - task.label_dir
+  runtime:
+    version: 1.0.7
+    cwd: /home/v-ziyangma/github/fairseq
+  verbose: false

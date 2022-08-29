@@ -47,6 +47,7 @@ finetuning_output_dir=${prefix_dir}/model/${model_name}/${exp_name}/${checkpoint
 echo "Start finetuning!!!"
 echo -e '\n'
 # pretrain
+# mpirun -np 8 python fairseq_cli/hydra_train.py # run when ssh to singularity \
 # python -m debugpy --listen 5678 --wait-for-client fairseq_cli/hydra_train.py  \
 python fairseq_cli/hydra_train.py  \
 --config-dir ${config_dir}  \
@@ -56,12 +57,13 @@ dataset.train_subset=${train_subset}  \
 dataset.valid_subset=${valid_subset}  \
 model.w2v_path=${model_path} \
 checkpoint.save_dir=${finetuning_output_dir}  \
-distributed_training.distributed_world_size=${distributed_world_size}  \
 optimization.update_freq=${update_freq} \
 dataset.max_tokens=${max_tokens}  \
 task.normalize=true \
 common.wandb_project=data2vec_jt \
 common.user_dir=data2vec_jt \
+model._name=data2vec_jt_ctc \
+# distributed_training.distributed_world_size=${distributed_world_size}  \
 # +criterion.wer_kenlm_model=${kenlm_model_path}  \
 # +criterion.wer_lexicon=${lexicon_path}  \
 # +criterion.wer_lm_weight=2 \
