@@ -1,1 +1,1 @@
-from .hubert_pretraining import *
+from .audio_pretraining import *

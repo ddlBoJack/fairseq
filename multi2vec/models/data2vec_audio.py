@@ -83,6 +83,11 @@ class Multi2VecConfig(Wav2Vec2Config):
         metadata={"help": "stop training if prediction var falls below this"},
     )
 
+    hubert_loss: Optional[bool] = field(
+        default=False,
+        metadata={"help": "whether to use hubert loss"},
+    )
+
 
 def get_annealed_rate(start, end, curr_step, total_steps):
     r = end - start
@@ -92,7 +97,7 @@ def get_annealed_rate(start, end, curr_step, total_steps):
 
 @register_model("multi2vec", dataclass=Multi2VecConfig)
 class Multi2VecModel(BaseFairseqModel):
-    def __init__(self, cfg: Multi2VecConfig):
+    def __init__(self, cfg: Multi2VecConfig, task):
         super().__init__()
         self.cfg = cfg
 
@@ -143,9 +148,12 @@ class Multi2VecModel(BaseFairseqModel):
         self.encoder = TransformerEncoder(cfg) # v-ziyangma: from wav2vec2
         self.layer_norm = LayerNorm(self.extractor_embed) # v-ziyangma: LayerNorm(512)
 
-        self.final_proj = nn.Linear(self.embed, self.embed) # v-ziyangma: p768 -> 768
+        self.final_proj = nn.Linear(self.embed, self.embed) # v-ziyangma: 768 -> 768
 
         self.num_updates = 0
+
+        if cfg.hubert_loss == True:
+            self.final_proj_hubert = nn.Linear(self.embed, len(task.discrete_dictionary)) # v-ziyangma: p768 -> 504
 
     def make_ema_teacher(self):
         # v-ziyangma: "We found it more efficient and slightly more accurate to share the parameters of the feature encoder and the positional encoder between the teacher and student networks."
@@ -219,7 +227,7 @@ class Multi2VecModel(BaseFairseqModel):
     def build_model(cls, cfg: Multi2VecConfig, task=None):
         """Build a new model instance."""
 
-        return cls(cfg)
+        return cls(cfg, task)
 
     def apply_mask(
         self,
@@ -393,6 +401,15 @@ class Multi2VecModel(BaseFairseqModel):
             "losses": {},
         }
 
+        if self.final_proj_hubert is not None:
+            x_hubert = x[mask_indices]
+            x_hubert = self.final_proj_hubert(x_hubert)
+            result = {
+                "x_hubert": x_hubert,
+                "mask_indices": mask_indices,
+                "losses": {},
+            }
+
         with torch.no_grad():
             self.ema.model.eval()
 
@@ -467,7 +484,7 @@ class Multi2VecModel(BaseFairseqModel):
             y = y[mask_indices] # v-ziyangma: total_length x feature_dim
 
         x = x[mask_indices]
-        x = self.final_proj(x) # v-ziyangma: WHY final_proj?
+        x = self.final_proj(x)
 
         sz = x.size(-1)
 

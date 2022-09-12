@@ -1,1 +1,1 @@
-from .hubert_criterion import Multi2VecCriterion
+from .model_criterion import Multi2VecCriterion

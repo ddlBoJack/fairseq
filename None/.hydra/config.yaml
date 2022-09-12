@@ -2,11 +2,11 @@ _name: null
 common:
   _name: null
   no_progress_bar: false
-  log_interval: 1
+  log_interval: 100
   log_format: json
-  log_file: null
-  tensorboard_logdir: tblog
-  wandb_project: debug
+  log_file: /home/zym22/model/multi2vec/hubert_baseline/checkpoint20/train_10h/log/hydra_train.log
+  tensorboard_logdir: /home/zym22/model/multi2vec/hubert_baseline/checkpoint20/train_10h/tensorboard
+  wandb_project: multi2vec
   azureml_logging: false
   seed: 1337
   cpu: false
@@ -26,7 +26,7 @@ common:
   amp_batch_retries: 2
   amp_init_scale: 128
   amp_scale_window: null
-  user_dir: multi2vec
+  user_dir: null
   empty_cache_freq: 0
   all_gather_list_size: 16384
   model_parallel_size: 1
@@ -46,14 +46,14 @@ common_eval:
 distributed_training:
   _name: null
   distributed_world_size: 1
-  distributed_num_procs: 4
+  distributed_num_procs: 1
   distributed_rank: 0
   distributed_backend: nccl
   distributed_init_method: null
   distributed_port: 29671
   device_id: 0
   distributed_no_spawn: false
-  ddp_backend: no_c10d
+  ddp_backend: c10d
   ddp_comm_hook: none
   bucket_cap_mb: 25
   fix_batches_to_gpus: false
@@ -86,20 +86,20 @@ distributed_training:
   not_fsdp_flatten_parameters: false
 dataset:
   _name: null
-  num_workers: 1
-  skip_invalid_size_inputs_valid_test: true
-  max_tokens: 700000
+  num_workers: 4
+  skip_invalid_size_inputs_valid_test: false
+  max_tokens: 3200000
   batch_size: null
   required_batch_size_multiple: 8
   required_seq_len_multiple: 1
   dataset_impl: null
   data_buffer_size: 10
-  train_subset: dev_clean
-  valid_subset: dev_clean
+  train_subset: train_10h
+  valid_subset: dev_other
   combine_valid_subsets: null
   ignore_unused_valid_subsets: false
   validate_interval: 5
-  validate_interval_updates: 10000
+  validate_interval_updates: 0
   validate_after_updates: 0
   fixed_validation_seed: null
   disable_validation: false
@@ -116,20 +116,20 @@ dataset:
 optimization:
   _name: null
   max_epoch: 0
-  max_update: 400000
+  max_update: 25000
   stop_time_hours: 0.0
-  clip_norm: 10.0
-  sentence_avg: false
+  clip_norm: 0.0
+  sentence_avg: true
   update_freq:
-  - 2
+  - 8
   lr:
-  - 0.0005
+  - 2.0e-05
   stop_min_lr: -1.0
   use_bmuf: false
   skip_remainder_batch: false
 checkpoint:
   _name: null
-  save_dir: /home/v-ziyangma/model/multi2vec/pretrain_debug
+  save_dir: /home/zym22/model/multi2vec/hubert_baseline/checkpoint20/train_10h
   restore_file: checkpoint_last.pt
   continue_once: null
   finetune_from_model: null
@@ -138,17 +138,17 @@ checkpoint:
   reset_meters: false
   reset_optimizer: false
   optimizer_overrides: '{}'
-  save_interval: 1
-  save_interval_updates: 10
-  keep_interval_updates: 1
+  save_interval: 40
+  save_interval_updates: 0
+  keep_interval_updates: -1
   keep_interval_updates_pattern: -1
   keep_last_epochs: -1
   keep_best_checkpoints: -1
   no_save: false
-  no_epoch_checkpoints: true
+  no_epoch_checkpoints: false
   no_last_checkpoints: false
   no_save_optimizer_state: false
-  best_checkpoint_metric: loss
+  best_checkpoint_metric: wer
   maximize_best_checkpoint_metric: false
   patience: -1
   checkpoint_suffix: ''
@@ -216,49 +216,45 @@ interactive:
   buffer_size: 0
   input: '-'
 model:
-  _name: multi2vec
-  label_rate: 50
-  skip_masked: false
-  skip_nomask: false
-  mask_prob: 0.8
-  extractor_mode: default
-  conv_feature_layers: '[(512,10,5)] + [(512,3,2)] * 4 + [(512,2,2)] * 2'
-  final_dim: 256
-  encoder_layerdrop: 0.05
-  dropout_input: 0.1
-  dropout_features: 0.1
-  dropout: 0.1
-  attention_dropout: 0.1
-  feature_grad_mult: 0.1
-  untie_final_proj: true
-  activation_dropout: 0.0
+  _name: hubert_ctc
+  w2v_path: /home/zym22/model/multi2vec/hubert_baseline/checkpoint20.pt
+  apply_mask: true
+  mask_selection: static
+  mask_length: 10
+  mask_other: 0
+  mask_prob: 0.75
+  mask_channel_selection: static
+  mask_channel_length: 64
+  mask_channel_other: 0
+  mask_channel_prob: 0.5
+  layerdrop: 0.1
+  dropout: 0.0
+  activation_dropout: 0.1
+  attention_dropout: 0.0
+  feature_grad_mult: 0.0
+  freeze_finetune_updates: 0
 task:
-  _name: multi2vec_pretraining
-  data: /home/v-ziyangma/data/LibriSpeech/manifest/resource
-  label_dir: /home/v-ziyangma/data/LibriSpeech/manifest/resource
-  labels:
-  - km
-  label_rate: ${model.label_rate}
-  sample_rate: 16000
-  max_sample_size: 250000
-  min_sample_size: 32000
-  pad_audio: false
-  random_crop: true
+  _name: hubert_pretraining
+  data: /home/zym22/data/LibriSpeech/manifest/resource
+  fine_tuning: true
+  label_dir: /home/zym22/data/LibriSpeech/manifest/resource
   normalize: false
+  labels:
+  - ltr
+  single_target: true
 criterion:
-  _name: hubert
-  pred_masked_weight: 1.0
-  pred_nomask_weight: 0.0
-  loss_weights:
-  - 10
+  _name: ctc
+  zero_infinity: true
 optimizer:
   _name: adam
   adam_betas: (0.9,0.98)
-  adam_eps: 1.0e-06
-  weight_decay: 0.01
+  adam_eps: 1.0e-08
 lr_scheduler:
-  _name: polynomial_decay
-  warmup_updates: 32000
+  _name: tri_stage
+  warmup_steps: 8000
+  hold_steps: 0
+  decay_steps: 72000
+  final_lr_scale: 0.05
 scoring: null
 bpe: null
 tokenizer: null

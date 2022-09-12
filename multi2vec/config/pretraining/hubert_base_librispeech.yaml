@@ -5,7 +5,7 @@ common:
   log_format: json
   log_interval: 200
   seed: 1337
-  tensorboard_logdir: tblog
+  # tensorboard_logdir: tblog
 
 checkpoint:
   save_interval_updates: 25000
@@ -17,7 +17,7 @@ distributed_training:
   ddp_backend: no_c10d
   distributed_backend: 'nccl'
   distributed_world_size: 32
-  distributed_port: 29671
+  # distributed_port: 29671
   nprocs_per_node: 8
   find_unused_parameters: true
 

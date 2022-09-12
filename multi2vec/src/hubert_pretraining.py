@@ -141,7 +141,7 @@ class Multi2VecPretrainingTask(FairseqTask):
     @classmethod
     def setup_task(
         cls, cfg: Multi2VecPretrainingConfig, **kwargs
-    ) -> "HubertPretrainingTask":
+    ) -> "Multi2VecPretrainingTask":
         return cls(cfg)
 
     def load_dictionaries(self):
