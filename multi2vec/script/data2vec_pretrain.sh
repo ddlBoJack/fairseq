@@ -12,7 +12,7 @@ mkdir -p ${model_path}
 mkdir -p ${model_path}/tensorboard
 mkdir -p ${model_path}/log
 
-export CUDA_VISIBLE_DEVICES=0,1
+export CUDA_VISIBLE_DEVICES=7
 echo "Start pretraining!!!"
 echo -e '\n'
 # pretrain
@@ -31,8 +31,8 @@ dataset.train_subset=train_clean_360  \
 dataset.valid_subset=dev_clean  \
 dataset.num_workers=4 \
 dataset.max_tokens=1900000 \
-distributed_training.distributed_world_size=2  \
-optimization.update_freq=[16] \
+distributed_training.distributed_world_size=1  \
+optimization.update_freq=[32] \
 common.log_interval=100 \
 common.tensorboard_logdir=${model_path}/tensorboard \
 common.log_file=${model_path}/log/hydra_train.log \
