@@ -10,7 +10,7 @@ exp_name=pretrain_debug
 model_path=/home/zym22/model/${model_name}/${exp_name}
 mkdir -p ${model_path}
 
-export CUDA_VISIBLE_DEVICES=7
+export CUDA_VISIBLE_DEVICES=1
 echo "Start pretraining!!!"
 echo -e '\n'
 # pretrain
@@ -29,7 +29,7 @@ task.normalize=true  \
 dataset.train_subset=dev_clean  \
 dataset.valid_subset=dev_clean  \
 dataset.num_workers=1 \
-dataset.max_tokens=700000 \
+dataset.max_tokens=200000 \
 dataset.disable_validation=true \
 criterion._name=multi2vec \
 distributed_training.distributed_world_size=1  \
@@ -37,7 +37,8 @@ optimization.update_freq=[2] \
 model._name=multi2vec \
 +task.label_dir=/home/zym22/data/LibriSpeech/2nd_iter \
 +task.label_type=km \
-+model.hubert_loss=true \
++model.ce_loss=true \
++model.mse_loss=true \
 # checkpoint.restore_file="checkpoint_last.pt" \
 # common.tensorboard_logdir=${tb_path} \
 # common.log_file=${log_file}  \

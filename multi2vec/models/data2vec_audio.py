@@ -6,6 +6,7 @@
 import logging
 import math
 from dataclasses import dataclass, field
+from tkinter import N
 from typing import Optional
 
 from omegaconf import II
@@ -15,7 +16,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributed as dist
 
-from fairseq.modules import EMAModule, EMAModuleConfig
+from  ..modules import EMAModule, EMAModuleConfig
 from fairseq.data.data_utils import compute_mask_indices
 from fairseq.models import BaseFairseqModel, register_model
 from fairseq.models.wav2vec import (
@@ -83,9 +84,13 @@ class Multi2VecConfig(Wav2Vec2Config):
         metadata={"help": "stop training if prediction var falls below this"},
     )
 
-    hubert_loss: Optional[bool] = field(
-        default=False,
-        metadata={"help": "whether to use hubert loss"},
+    ce_loss: Optional[bool] = field(
+        default=True,
+        metadata={"help": "whether to use ce loss"},
+    )
+    mse_loss: Optional[bool] = field(
+        default=True,
+        metadata={"help": "whether to use mse loss"},
     )
 
 
@@ -148,13 +153,15 @@ class Multi2VecModel(BaseFairseqModel):
         self.encoder = TransformerEncoder(cfg) # v-ziyangma: from wav2vec2
         self.layer_norm = LayerNorm(self.extractor_embed) # v-ziyangma: LayerNorm(512)
 
-        self.final_proj = nn.Linear(self.embed, self.embed) # v-ziyangma: 768 -> 768
+        self.final_proj = None
+        if cfg.mse_loss == True:
+            self.final_proj = nn.Linear(self.embed, self.embed) # v-ziyangma: 768 -> 768
+        self.final_proj_hubert = None
+        if cfg.ce_loss == True:
+            self.final_proj_hubert = nn.Linear(self.embed, len(task.discrete_dictionary)) # v-ziyangma: 768 -> 504
 
         self.num_updates = 0
-
-        if cfg.hubert_loss == True:
-            self.final_proj_hubert = nn.Linear(self.embed, len(task.discrete_dictionary)) # v-ziyangma: p768 -> 504
-
+        
     def make_ema_teacher(self):
         # v-ziyangma: "We found it more efficient and slightly more accurate to share the parameters of the feature encoder and the positional encoder between the teacher and student networks."
         ema_config = EMAModuleConfig(
@@ -407,125 +414,128 @@ class Multi2VecModel(BaseFairseqModel):
             result = {
                 "x_hubert": x_hubert,
                 "mask_indices": mask_indices,
+                "sample_size": x_hubert.shape[0],
                 "losses": {},
             }
 
-        with torch.no_grad():
-            self.ema.model.eval()
+        if self.final_proj is not None:
 
-            if self.cfg.ema_transformer_only:
-                y, layer_results = self.ema.model.extract_features(
-                    pre_encoder_features,
-                    padding_mask=padding_mask,
-                    min_layer=self.cfg.encoder_layers - self.average_top_k_layers,
-                ) # v-ziyangma: layer_results return top_k_layers' results
-                y = {
-                    "x": y,
-                    "padding_mask": padding_mask,
-                    "layer_results": layer_results,
-                }
+            with torch.no_grad():
+                self.ema.model.eval()
+
+                if self.cfg.ema_transformer_only:
+                    y, layer_results = self.ema.model.extract_features(
+                        pre_encoder_features,
+                        padding_mask=padding_mask,
+                        min_layer=self.cfg.encoder_layers - self.average_top_k_layers,
+                    ) # v-ziyangma: layer_results return top_k_layers' results
+                    y = {
+                        "x": y,
+                        "padding_mask": padding_mask,
+                        "layer_results": layer_results,
+                    }
+                else:
+                    y = self.ema.model.extract_features(
+                        source=source,
+                        padding_mask=orig_padding_mask,
+                        mask=False,
+                    )
+
+                target_layer_results = [l[2] for l in y["layer_results"]] # v-ziyangma: layer_results is layers before dropout3, residual, final_layer_norm.
+
+                permuted = False
+                if self.cfg.instance_norm_target_layer or self.cfg.batch_norm_target_layer:
+                    target_layer_results = [
+                        tl.permute(1, 2, 0) for tl in target_layer_results  # TBC -> BCT
+                    ]
+                    permuted = True
+
+                if self.cfg.batch_norm_target_layer:
+                    target_layer_results = [
+                        F.batch_norm(
+                            tl.float(), running_mean=None, running_var=None, training=True
+                        )
+                        for tl in target_layer_results
+                    ]
+
+                if self.cfg.instance_norm_target_layer:
+                    target_layer_results = [
+                        F.instance_norm(tl.float()) for tl in target_layer_results
+                    ]
+
+                if permuted:
+                    target_layer_results = [
+                        tl.transpose(1, 2) for tl in target_layer_results  # BCT -> BTC
+                    ]
+
+                if self.cfg.group_norm_target_layer:
+                    target_layer_results = [
+                        F.layer_norm(tl.float(), tl.shape[-2:])
+                        for tl in target_layer_results
+                    ]
+
+                if self.cfg.layer_norm_target_layer:
+                    target_layer_results = [
+                        F.layer_norm(tl.float(), tl.shape[-1:])
+                        for tl in target_layer_results
+                    ]
+
+                y = sum(target_layer_results) / len(target_layer_results)
+
+                if self.cfg.layer_norm_targets:
+                    y = F.layer_norm(y.float(), y.shape[-1:])
+
+                if self.cfg.instance_norm_targets:
+                    y = F.instance_norm(y.float().transpose(1, 2)).transpose(1, 2)
+
+                if not permuted:
+                    y = y.transpose(0, 1)
+
+                y = y[mask_indices] # v-ziyangma: total_length x feature_dim
+
+            x = x[mask_indices]
+            x = self.final_proj(x)
+
+            sz = x.size(-1)
+
+            if self.loss_beta == 0:
+                loss = F.mse_loss(x.float(), y.float(), reduction="none").sum(dim=-1)
             else:
-                y = self.ema.model.extract_features(
-                    source=source,
-                    padding_mask=orig_padding_mask,
-                    mask=False,
+                loss = F.smooth_l1_loss(
+                    x.float(), y.float(), reduction="none", beta=self.loss_beta
+                ).sum(dim=-1)
+
+            if self.loss_scale is not None:
+                scale = self.loss_scale
+            else:
+                scale = 1 / math.sqrt(sz)
+
+            result["losses"]["regression"] = loss.sum() * scale
+
+            if "sample_size" not in result:
+                result["sample_size"] = loss.numel()
+
+            with torch.no_grad():
+                result["target_var"] = self.compute_var(y)
+                result["pred_var"] = self.compute_var(x.float())
+
+            if self.num_updates > 5000 and result["target_var"] < self.cfg.min_target_var:
+                logger.error(
+                    f"target var is {result['target_var'].item()} < {self.cfg.min_target_var}, exiting"
+                )
+                raise Exception(
+                    f"target var is {result['target_var'].item()} < {self.cfg.min_target_var}, exiting"
+                )
+            if self.num_updates > 5000 and result["pred_var"] < self.cfg.min_pred_var:
+                logger.error(
+                    f"pred var is {result['pred_var'].item()} < {self.cfg.min_pred_var}, exiting"
+                )
+                raise Exception(
+                    f"pred var is {result['pred_var'].item()} < {self.cfg.min_pred_var}, exiting"
                 )
 
-            target_layer_results = [l[2] for l in y["layer_results"]] # v-ziyangma: layer_results is layers before dropout3, residual, final_layer_norm.
-
-            permuted = False
-            if self.cfg.instance_norm_target_layer or self.cfg.batch_norm_target_layer:
-                target_layer_results = [
-                    tl.permute(1, 2, 0) for tl in target_layer_results  # TBC -> BCT
-                ]
-                permuted = True
-
-            if self.cfg.batch_norm_target_layer:
-                target_layer_results = [
-                    F.batch_norm(
-                        tl.float(), running_mean=None, running_var=None, training=True
-                    )
-                    for tl in target_layer_results
-                ]
-
-            if self.cfg.instance_norm_target_layer:
-                target_layer_results = [
-                    F.instance_norm(tl.float()) for tl in target_layer_results
-                ]
-
-            if permuted:
-                target_layer_results = [
-                    tl.transpose(1, 2) for tl in target_layer_results  # BCT -> BTC
-                ]
-
-            if self.cfg.group_norm_target_layer:
-                target_layer_results = [
-                    F.layer_norm(tl.float(), tl.shape[-2:])
-                    for tl in target_layer_results
-                ]
-
-            if self.cfg.layer_norm_target_layer:
-                target_layer_results = [
-                    F.layer_norm(tl.float(), tl.shape[-1:])
-                    for tl in target_layer_results
-                ]
-
-            y = sum(target_layer_results) / len(target_layer_results)
-
-            if self.cfg.layer_norm_targets:
-                y = F.layer_norm(y.float(), y.shape[-1:])
-
-            if self.cfg.instance_norm_targets:
-                y = F.instance_norm(y.float().transpose(1, 2)).transpose(1, 2)
-
-            if not permuted:
-                y = y.transpose(0, 1)
-
-            y = y[mask_indices] # v-ziyangma: total_length x feature_dim
-
-        x = x[mask_indices]
-        x = self.final_proj(x)
-
-        sz = x.size(-1)
-
-        if self.loss_beta == 0:
-            loss = F.mse_loss(x.float(), y.float(), reduction="none").sum(dim=-1)
-        else:
-            loss = F.smooth_l1_loss(
-                x.float(), y.float(), reduction="none", beta=self.loss_beta
-            ).sum(dim=-1)
-
-        if self.loss_scale is not None:
-            scale = self.loss_scale
-        else:
-            scale = 1 / math.sqrt(sz)
-
-        result["losses"]["regression"] = loss.sum() * scale
-
-        if "sample_size" not in result:
-            result["sample_size"] = loss.numel()
-
-        with torch.no_grad():
-            result["target_var"] = self.compute_var(y)
-            result["pred_var"] = self.compute_var(x.float())
-
-        if self.num_updates > 5000 and result["target_var"] < self.cfg.min_target_var:
-            logger.error(
-                f"target var is {result['target_var'].item()} < {self.cfg.min_target_var}, exiting"
-            )
-            raise Exception(
-                f"target var is {result['target_var'].item()} < {self.cfg.min_target_var}, exiting"
-            )
-        if self.num_updates > 5000 and result["pred_var"] < self.cfg.min_pred_var:
-            logger.error(
-                f"pred var is {result['pred_var'].item()} < {self.cfg.min_pred_var}, exiting"
-            )
-            raise Exception(
-                f"pred var is {result['pred_var'].item()} < {self.cfg.min_pred_var}, exiting"
-            )
-
-        if self.ema is not None:
-            result["ema_decay"] = self.ema.get_decay() * 1000
+            if self.ema is not None:
+                result["ema_decay"] = self.ema.get_decay() * 1000
 
         return result
 
@@ -560,6 +570,7 @@ class Multi2VecModel(BaseFairseqModel):
 
     def remove_pretraining_modules(self, last_layer=None):
         self.final_proj = None
+        self.final_proj_hubert = None
         self.ema = None
         if last_layer is not None:
             self.encoder.layers = nn.ModuleList(

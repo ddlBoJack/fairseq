@@ -12,7 +12,7 @@ mkdir -p ${model_path}
 mkdir -p ${model_path}/tensorboard
 mkdir -p ${model_path}/log
 
-export CUDA_VISIBLE_DEVICES=3,4
+export CUDA_VISIBLE_DEVICES=4,5
 echo "Start pretraining!!!"
 echo -e '\n'
 # pretrain

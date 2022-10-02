@@ -7,14 +7,14 @@ cd /home/zym22/fairseq
 # edit your exp
 model_name=multi2vec
 exp_name=multi2vec_baseline
-checkpoint=checkpoint60
+checkpoint=checkpoint500
 finetune=train_10h
 model_path=/home/zym22/model/${model_name}/${exp_name}/${checkpoint}/${finetune}
 mkdir -p ${model_path}
 mkdir -p ${model_path}/tensorboard
 mkdir -p ${model_path}/log
 
-export CUDA_VISIBLE_DEVICES=6,7
+export CUDA_VISIBLE_DEVICES=4,5
 echo "Start finetuning!!!"
 echo -e '\n'
 # finetune
@@ -39,7 +39,7 @@ dataset.validate_after_updates=0 \
 distributed_training.distributed_world_size=2  \
 optimization.update_freq=[4] \
 optimization.max_update=20000 \
-model.w2v_path=/home/zym22/model/multi2vec/multi2vec_baseline/checkpoint60.pt \
+model.w2v_path=/home/zym22/model/multi2vec/multi2vec_baseline/checkpoint500.pt \
 model.freeze_finetune_updates=0 \
 common.log_interval=100 \
 common.tensorboard_logdir=${model_path}/tensorboard \
