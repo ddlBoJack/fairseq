@@ -1,22 +1,22 @@
 #!/bin/bash
-export PYTHONPATH=/home/zym22/fairseq:$PYTHONPATH
+export PYTHONPATH=~/fairseq:$PYTHONPATH
 export CUDA_LAUNCH_BLOCKING=1
 export HYDRA_FULL_ERROR=1
-cd /home/zym22/fairseq
+cd ~/fairseq
 
 # edit your exp
 model_name=multi2vec
 exp_name=pretrain_debug
-model_path=/home/zym22/model/${model_name}/${exp_name}
+model_path=~/models/${model_name}/${exp_name}
 mkdir -p ${model_path}
 
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=3
 echo "Start pretraining!!!"
 echo -e '\n'
 # pretrain
-# python -m debugpy --listen 5678 --wait-for-client fairseq_cli/hydra_train.py  \
-python fairseq_cli/hydra_train.py \
---config-dir /home/zym22/fairseq/multi2vec/config/pretraining  \
+# python fairseq_cli/hydra_train.py \
+python -m debugpy --listen 5678 --wait-for-client fairseq_cli/hydra_train.py  \
+--config-dir ~/fairseq/multi2vec/config/pretraining  \
 --config-name base_librispeech  \
 common.log_interval=1 \
 common.wandb_project=debug \

@@ -1,24 +1,24 @@
 #!/bin/bash
-export PYTHONPATH=/home/zym22/fairseq:$PYTHONPATH
+export PYTHONPATH=~/fairseq:$PYTHONPATH
 export CUDA_LAUNCH_BLOCKING=1
 export HYDRA_FULL_ERROR=1
-cd /home/zym22/fairseq
+cd ~/fairseq
 
 # edit your exp
 model_name=multi2vec
 exp_name=data2vec_baseline
-model_path=/home/zym22/model/${model_name}/${exp_name}
+model_path=/data/zym22/models/${model_name}/${exp_name}
 mkdir -p ${model_path}
 mkdir -p ${model_path}/tensorboard
 mkdir -p ${model_path}/log
 
-export CUDA_VISIBLE_DEVICES=2,3
+export CUDA_VISIBLE_DEVICES=4,5,6,7
 echo "Start pretraining!!!"
 echo -e '\n'
 # pretrain
 # python -m debugpy --listen 5678 --wait-for-client fairseq_cli/hydra_train.py  \
 python fairseq_cli/hydra_train.py \
---config-dir /home/zym22/fairseq/multi2vec/config/pretraining  \
+--config-dir ~/fairseq/multi2vec/config/pretraining  \
 --config-name base_librispeech  \
 checkpoint.save_interval=20 \
 checkpoint.keep_last_epochs=-1 \
@@ -31,8 +31,8 @@ dataset.train_subset=train_clean_360  \
 dataset.valid_subset=dev_clean  \
 dataset.num_workers=4 \
 dataset.max_tokens=1900000 \
-distributed_training.distributed_world_size=2  \
-optimization.update_freq=[16] \
+distributed_training.distributed_world_size=4  \
+optimization.update_freq=[8] \
 common.log_interval=100 \
 common.tensorboard_logdir=${model_path}/tensorboard \
 common.log_file=${model_path}/log/hydra_train.log \

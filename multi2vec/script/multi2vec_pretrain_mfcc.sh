@@ -6,13 +6,13 @@ cd ~/fairseq
 
 # edit your exp
 model_name=multi2vec
-exp_name=multi2vec_baseline
+exp_name=multi2vec_ablation_mfcc
 model_path=/data/zym22/models/${model_name}/${exp_name}
 mkdir -p ${model_path}
 mkdir -p ${model_path}/tensorboard
 mkdir -p ${model_path}/log
 
-export CUDA_VISIBLE_DEVICES=6,7
+export CUDA_VISIBLE_DEVICES=0,1,2,4
 echo "Start pretraining!!!"
 echo -e '\n'
 # pretrain
@@ -29,7 +29,7 @@ checkpoint.save_dir=${model_path}  \
 task._name=multi2vec_pretraining \
 task.data=/home/zym22/data/LibriSpeech/manifest/resource  \
 task.normalize=true  \
-+task.label_dir=/home/zym22/data/LibriSpeech/2nd_iter \
++task.label_dir=/home/zym22/data/LibriSpeech/1st_iter \
 +task.label_type=km \
 dataset.train_subset=train_clean_360  \
 dataset.valid_subset=dev_clean  \
@@ -37,8 +37,8 @@ dataset.num_workers=4 \
 dataset.max_tokens=1900000 \
 dataset.disable_validation=true \
 criterion._name=multi2vec \
-distributed_training.distributed_world_size=2  \
-optimization.update_freq=[16] \
+distributed_training.distributed_world_size=4  \
+optimization.update_freq=[8] \
 model._name=multi2vec \
 common.log_interval=100 \
 common.tensorboard_logdir=${model_path}/tensorboard \

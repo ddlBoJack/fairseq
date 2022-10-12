@@ -159,6 +159,7 @@ class Multi2VecModel(BaseFairseqModel):
         self.final_proj_hubert = None
         if cfg.ce_loss == True:
             self.final_proj_hubert = nn.Linear(self.embed, len(task.discrete_dictionary)) # v-ziyangma: 768 -> 504
+            # self.final_proj_hubert = nn.Linear(self.embed, 504) # v-ziyangma: 768 -> 504
 
         self.num_updates = 0
         

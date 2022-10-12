@@ -53,6 +53,7 @@ class Multi2VecCriterion(FairseqCriterion):
         net_output = model(**sample["net_input"])
 
         if "target" in sample and "mask_indices" in net_output:
+            # sample["target"] = sample["target"][..., ::2] #for 100hz mfcc
             if sample["target"].shape != net_output["mask_indices"].shape:
                 cropped_size = net_output["mask_indices"].shape[-1]
                 sample["target"] = sample["target"][..., :cropped_size]
