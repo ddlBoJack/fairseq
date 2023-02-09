@@ -4,8 +4,8 @@ export CUDA_LAUNCH_BLOCKING=1
 export HYDRA_FULL_ERROR=1
 cd ~/fairseq
 
-checkpoint_dir=/data/zym22/models/multi2vec/multi2vec_baseline/checkpoint700/train_1h
-export CUDA_VISIBLE_DEVICES=2
+checkpoint_dir=/data/zym22/models/multi2vec/multi2vec_baseline/checkpoint700/train_100h_4-gram
+export CUDA_VISIBLE_DEVICES=1
 
 # viterbi
 for SPLIT in dev_clean dev_other test_clean test_other; do \

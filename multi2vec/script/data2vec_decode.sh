@@ -4,8 +4,8 @@ export CUDA_LAUNCH_BLOCKING=1
 export HYDRA_FULL_ERROR=1
 cd ~/fairseq
 
-checkpoint_dir=/data/zym22/models/multi2vec/data2vec_baseline/checkpoint700/train_1h
-export CUDA_VISIBLE_DEVICES=3
+checkpoint_dir=/data/zym22/models/multi2vec/data2vec_baseline/checkpoint700/train_100h
+export CUDA_VISIBLE_DEVICES=3,4,5,6
 for SPLIT in dev_clean dev_other test_clean test_other; do \
     decode_output_dir=${checkpoint_dir}/${SPLIT}/viterbi
     python examples/speech_recognition/new/infer.py \
@@ -23,7 +23,7 @@ for SPLIT in dev_clean dev_other test_clean test_other; do \
     common_eval.path=${checkpoint_dir}/checkpoint_best.pt \
     common_eval.results_path=${decode_output_dir} \
     common_eval.quiet=true \
-    distributed_training.distributed_world_size=1 \
+    distributed_training.distributed_world_size=4 \
     hydra.run.dir=${decode_output_dir} \
     # common.user_dir=multi2vec
 done
