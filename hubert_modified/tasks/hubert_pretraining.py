@@ -37,21 +37,21 @@ class LabelEncoder(object):
 
 
 @dataclass
-class HubertMudifiedPretrainingConfig(HubertPretrainingConfig):
+class HubertModifiedPretrainingConfig(HubertPretrainingConfig):
     use_lmdb: bool = field(
         default=False,
         metadata={"help": "use lmdb dataset"},
     )
 
 
-@register_task("hubert_modified_pretraining", dataclass=HubertMudifiedPretrainingConfig)
+@register_task("hubert_modified_pretraining", dataclass=HubertModifiedPretrainingConfig)
 class HubertModifiedPretrainingTask(FairseqTask):
 
-    cfg: HubertMudifiedPretrainingConfig
+    cfg: HubertModifiedPretrainingConfig
 
     def __init__(
         self,
-        cfg: HubertMudifiedPretrainingConfig,
+        cfg: HubertModifiedPretrainingConfig,
     ) -> None:
         super().__init__(cfg)
 
@@ -82,7 +82,7 @@ class HubertModifiedPretrainingTask(FairseqTask):
 
     @classmethod
     def setup_task(
-        cls, cfg: HubertMudifiedPretrainingConfig, **kwargs
+        cls, cfg: HubertModifiedPretrainingConfig, **kwargs
     ) -> "HubertModifiedPretrainingTask":
         return cls(cfg)
 
