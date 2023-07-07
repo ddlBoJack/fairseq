@@ -49,6 +49,14 @@ class HubertModifiedConfig(HubertConfig):
         default_factory=lambda: [],
         metadata={"help": "intermediate layer supervision layers using which target"},
     )
+    relabel: bool = field(
+        default=False,
+        metadata={"help": "relabel the target"},
+    )
+    relabel_start: Optional[int] = field(
+        default=None,
+        metadata={"help": "which step to start relabeling"},
+    )
 
 
 @register_model("hubert_modified", dataclass=HubertModifiedConfig)
@@ -155,6 +163,14 @@ class HubertModifiedModel(BaseFairseqModel):
                     ]
                 )
 
+        self.relabel = cfg.relabel
+        self.relabel_start = cfg.relabel_start
+        self.num_updates = 0
+
+    def set_num_updates(self, num_updates):
+        super().set_num_updates(num_updates)
+        self.num_updates = num_updates
+
     def upgrade_state_dict_named(self, state_dict, name):
         """Upgrade a (possibly old) state dict for new versions of fairseq."""
 
@@ -218,6 +234,29 @@ class HubertModifiedModel(BaseFairseqModel):
         if neg_is_pos.any():
             logits[1:][neg_is_pos] = float("-inf")
         logits = logits.transpose(0, 1)  # (num_x, num_cls+1)
+        return logits
+
+    def compute_nce_relabel(self, x, pos, pos_shift_left, pos_shift_right, negs):
+        neg_is_pos = (pos == negs).all(-1)
+        neg_is_pos_shift_left = (pos_shift_left == negs).all(-1) # TODO
+        neg_is_pos_shift_right = (pos_shift_right == negs).all(-1) # TODO
+        pos = pos.unsqueeze(0)
+        pos_shift_left = pos_shift_left.unsqueeze(0)
+        pos_shift_right = pos_shift_right.unsqueeze(0)
+        targets = torch.cat([pos, pos_shift_left, pos_shift_right, negs], dim=0)
+
+        logits = torch.cosine_similarity(x.float(), targets.float(), dim=-1).type_as(x)
+        logits /= self.logit_temp
+        max_values, max_indices = torch.max(logits[:3], dim=0, keepdim=True)
+        bool_mask = (logits[:3] == max_values)
+        int_mask = bool_mask.to(torch.int)
+        top_max_indices = torch.argmax(int_mask, dim=0, keepdim=True)
+        mask = torch.zeros_like(logits[:3], dtype=torch.int)
+        mask.scatter_(0, top_max_indices, 1)
+        logits = torch.cat([torch.sum(logits[:3] * mask, dim=0, keepdim=True), logits[3:]], dim=0)
+        if neg_is_pos.any():
+            logits[1:][neg_is_pos] = float("-inf") # TODO
+        logits = logits.transpose(0, 1)
         return logits
 
     def forward_features(self, source: torch.Tensor) -> torch.Tensor:
@@ -327,6 +366,22 @@ class HubertModifiedModel(BaseFairseqModel):
             # negs: (Neg, S, D)
             return self.compute_nce(proj_x, y, negs)
 
+        def compute_pred_relabel(proj_x, target,target_shift_left, target_shift_right, label_embs):
+            # compute logits for the i-th label set
+            y = torch.index_select(label_embs, 0, target.long())
+            y_shift_left = torch.index_select(label_embs, 0, target_shift_left.long())
+            y_shift_right = torch.index_select(label_embs, 0, target_shift_right.long())
+            negs = label_embs.unsqueeze(1).expand(-1, proj_x.size(0), -1)
+            if self.target_glu:
+                y = self.target_glu(y)
+                y_shift_left = self.target_glu(y_shift_left)
+                y_shift_right = self.target_glu(y_shift_right)
+                negs = self.target_glu(negs)
+            # proj_x: (S, D)
+            # y: (S, D)
+            # negs: (Neg, S, D)
+            return self.compute_nce_relabel(proj_x, y, y_shift_left, y_shift_right, negs)
+
         label_embs_list = self.label_embs_concat.split(self.num_classes, 0) # codebook [dict_num, class_num, 256]
 
         if not self.skip_masked:
@@ -338,10 +393,28 @@ class HubertModifiedModel(BaseFairseqModel):
                 else:
                     proj_x_m_list = [proj_x_m for _ in range(len(target_list))] # [TOTAL_T, 256*2] -> 2*[TOTAL_T, 256]
 
-                logit_m_list = [
-                    compute_pred(proj_x_m, t[masked_indices], label_embs_list[i])
-                    for i, (proj_x_m, t) in enumerate(zip(proj_x_m_list, target_list))
-                ]
+                if self.relabel and self.num_updates >= self.relabel_start:
+                    target_shift_left = [
+                        torch.cat([t[:, 1:], t[:, -1:]], dim=-1) for t in target_list
+                    ]
+                    # target_m_list_shift_left = [
+                    #     t[masked_indices] for t in target_shift_left
+                    # ]
+                    target_shift_right = [
+                        torch.cat([t[:, :1], t[:, :-1]], dim=-1) for t in target_list
+                    ]
+                    # target_m_list_shift_right = [
+                    #     t[masked_indices] for t in target_shift_right
+                    # ]    
+                    logit_m_list = [
+                        compute_pred_relabel(proj_x_m, t[masked_indices], tl[masked_indices], tr[masked_indices], label_embs_list[i])
+                        for i, (proj_x_m, t, tl, tr) in enumerate(zip(proj_x_m_list, target_list, target_shift_left, target_shift_right))
+                    ]   
+                else:
+                    logit_m_list = [
+                        compute_pred(proj_x_m, t[masked_indices], label_embs_list[i])
+                        for i, (proj_x_m, t) in enumerate(zip(proj_x_m_list, target_list))
+                    ]
             else:
                 proj_x_m_list = []
                 logit_m_list = []
