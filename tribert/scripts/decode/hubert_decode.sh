@@ -4,8 +4,8 @@ export CUDA_LAUNCH_BLOCKING=1
 export HYDRA_FULL_ERROR=1
 cd ~/fairseq
 
-checkpoint_dir=/mnt/lustre/sjtu/home/zym22/models/tribert/monophone40_baseline/checkpoint100/train_100h
-export CUDA_VISIBLE_DEVICES=6,7
+checkpoint_dir=/mnt/lustre/sjtu/home/zym22/models/tribert/u_triphone1744_hmmdmm/checkpoint_last/train_100h
+export CUDA_VISIBLE_DEVICES=0,1,2,3
 
 # infer_viterbi
 for SPLIT in dev_clean dev_other test_clean test_other; do \
@@ -22,7 +22,7 @@ for SPLIT in dev_clean dev_other test_clean test_other; do \
     common_eval.path=${checkpoint_dir}/checkpoint_best.pt \
     common_eval.results_path=${decode_output_dir} \
     common_eval.quiet=true \
-    distributed_training.distributed_world_size=2 \
+    distributed_training.distributed_world_size=4 \
     hydra.run.dir=${decode_output_dir} \
     #common.user_dir=multi2vec
 done

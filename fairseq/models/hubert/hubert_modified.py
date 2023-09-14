@@ -30,7 +30,7 @@ from fairseq.modules import GradMultiply, LayerNorm
 #     HubertPretrainingTask,
 # )
 from fairseq.models.hubert import HubertConfig
-from ..tasks import HubertModifiedPretrainingConfig, HubertModifiedPretrainingTask
+from  fairseq.tasks.hubert_modified_pretraining import HubertModifiedPretrainingConfig, HubertModifiedPretrainingTask
 
 logger = logging.getLogger(__name__)
 
@@ -49,15 +49,6 @@ class HubertModifiedConfig(HubertConfig):
         default_factory=lambda: [],
         metadata={"help": "intermediate layer supervision layers using which target"},
     )
-    relabel: bool = field(
-        default=False,
-        metadata={"help": "relabel the target"},
-    )
-    relabel_start: Optional[int] = field(
-        default=None,
-        metadata={"help": "which step to start relabeling"},
-    )
-    hubert_cross_entropy: bool = II("criterion.hubert_cross_entropy")
 
 
 @register_model("hubert_modified", dataclass=HubertModifiedConfig)
@@ -127,73 +118,42 @@ class HubertModifiedModel(BaseFairseqModel):
             )
 
         self.untie_final_proj = cfg.untie_final_proj
+        if self.untie_final_proj:
+            self.final_proj = nn.Linear(
+                cfg.encoder_embed_dim, final_dim * len(dictionaries)
+            )
+        else:
+            self.final_proj = nn.Linear(cfg.encoder_embed_dim, final_dim)
+
+        # modules below are not needed during fine-tuning
+        if any([d is None for d in dictionaries]):
+            logger.info("cannot find dictionary. assume will be used for fine-tuning")
+        else:
+            self.num_classes = [len(d) for d in dictionaries]
+            self.label_embs_concat = nn.Parameter(
+                torch.FloatTensor(sum(self.num_classes), final_dim)
+            )
+            nn.init.uniform_(self.label_embs_concat)
+
         self.ils = cfg.ils
-
-        self.hubert_cross_entropy = cfg.hubert_cross_entropy
-        if not self.hubert_cross_entropy:
+        if self.ils:
+            del self.final_proj
+            self.ils_layers = cfg.ils_layers
+            self.ils_layers_target = cfg.ils_layers_target
             if self.untie_final_proj:
-                self.final_proj = nn.Linear(
-                    cfg.encoder_embed_dim, final_dim * len(dictionaries)
-                )
-            else:
-                self.final_proj = nn.Linear(cfg.encoder_embed_dim, final_dim)
-
-            # modules below are not needed during fine-tuning
-            if any([d is None for d in dictionaries]):
-                logger.info("cannot find dictionary. assume will be used for fine-tuning")
-            else:
-                self.num_classes = [len(d) for d in dictionaries]
-                self.label_embs_concat = nn.Parameter(
-                    torch.FloatTensor(sum(self.num_classes), final_dim)
-                )
-                nn.init.uniform_(self.label_embs_concat)
-
-            if self.ils:
-                del self.final_proj
-                self.ils_layers = cfg.ils_layers
-                self.ils_layers_target = cfg.ils_layers_target
-                if self.untie_final_proj:
-                    self.final_proj = nn.ModuleList(
-                        [
-                            nn.Linear(cfg.encoder_embed_dim, final_dim * len(dictionaries))
-                            for _ in self.ils_layers
-                        ]
-                    )
-                else:
-                    self.final_proj = nn.ModuleList(
-                        [
-                            nn.Linear(cfg.encoder_embed_dim, final_dim) 
-                            for _ in self.ils_layers
-                        ]
-                    )
-        else: # cross entropy loss
-            if any([d is None for d in dictionaries]):
-                    logger.info("cannot find dictionary. assume will be used for fine-tuning")
-            else:
-                self.num_classes = [len(d) for d in dictionaries]
-
-            if not self.ils:
-                self.final_proj = nn.Linear(
-                    cfg.encoder_embed_dim, sum(self.num_classes)
-                )
-            else:
-                del self.final_proj
-                self.ils_layers = cfg.ils_layers
-                self.ils_layers_target = cfg.ils_layers_target
                 self.final_proj = nn.ModuleList(
                     [
-                        nn.Linear(cfg.encoder_embed_dim, self.num_classes[layer_target])
-                        for layer_target in self.ils_layers_target
+                        nn.Linear(cfg.encoder_embed_dim, final_dim * len(dictionaries))
+                        for _ in self.ils_layers
                     ]
                 )
-
-        self.relabel = cfg.relabel
-        self.relabel_start = cfg.relabel_start
-        self.num_updates = 0
-
-    def set_num_updates(self, num_updates):
-        super().set_num_updates(num_updates)
-        self.num_updates = num_updates
+            else:
+                self.final_proj = nn.ModuleList(
+                    [
+                        nn.Linear(cfg.encoder_embed_dim, final_dim) 
+                        for _ in self.ils_layers
+                    ]
+                )
 
     def upgrade_state_dict_named(self, state_dict, name):
         """Upgrade a (possibly old) state dict for new versions of fairseq."""
@@ -258,29 +218,6 @@ class HubertModifiedModel(BaseFairseqModel):
         if neg_is_pos.any():
             logits[1:][neg_is_pos] = float("-inf")
         logits = logits.transpose(0, 1)  # (num_x, num_cls+1)
-        return logits
-
-    def compute_nce_relabel(self, x, pos, pos_shift_left, pos_shift_right, negs):
-        neg_is_pos = (pos == negs).all(-1)
-        neg_is_pos_shift_left = (pos_shift_left == negs).all(-1) # TODO
-        neg_is_pos_shift_right = (pos_shift_right == negs).all(-1) # TODO
-        pos = pos.unsqueeze(0)
-        pos_shift_left = pos_shift_left.unsqueeze(0)
-        pos_shift_right = pos_shift_right.unsqueeze(0)
-        targets = torch.cat([pos, pos_shift_left, pos_shift_right, negs], dim=0)
-
-        logits = torch.cosine_similarity(x.float(), targets.float(), dim=-1).type_as(x)
-        logits /= self.logit_temp
-        max_values, max_indices = torch.max(logits[:3], dim=0, keepdim=True)
-        bool_mask = (logits[:3] == max_values)
-        int_mask = bool_mask.to(torch.int)
-        top_max_indices = torch.argmax(int_mask, dim=0, keepdim=True)
-        mask = torch.zeros_like(logits[:3], dtype=torch.int)
-        mask.scatter_(0, top_max_indices, 1)
-        logits = torch.cat([torch.sum(logits[:3] * mask, dim=0, keepdim=True), logits[3:]], dim=0)
-        if neg_is_pos.any():
-            logits[1:][neg_is_pos] = float("-inf") # TODO
-        logits = logits.transpose(0, 1)
         return logits
 
     def forward_features(self, source: torch.Tensor) -> torch.Tensor:
@@ -390,166 +327,61 @@ class HubertModifiedModel(BaseFairseqModel):
             # negs: (Neg, S, D)
             return self.compute_nce(proj_x, y, negs)
 
-        def compute_pred_relabel(proj_x, target,target_shift_left, target_shift_right, label_embs):
-            # compute logits for the i-th label set
-            y = torch.index_select(label_embs, 0, target.long())
-            y_shift_left = torch.index_select(label_embs, 0, target_shift_left.long())
-            y_shift_right = torch.index_select(label_embs, 0, target_shift_right.long())
-            negs = label_embs.unsqueeze(1).expand(-1, proj_x.size(0), -1)
-            if self.target_glu:
-                y = self.target_glu(y)
-                y_shift_left = self.target_glu(y_shift_left)
-                y_shift_right = self.target_glu(y_shift_right)
-                negs = self.target_glu(negs)
-            # proj_x: (S, D)
-            # y: (S, D)
-            # negs: (Neg, S, D)
-            return self.compute_nce_relabel(proj_x, y, y_shift_left, y_shift_right, negs)
+        label_embs_list = self.label_embs_concat.split(self.num_classes, 0) # codebook [dict_num, class_num, 256]
 
-        if not self.hubert_cross_entropy:
-            label_embs_list = self.label_embs_concat.split(self.num_classes, 0) # codebook [dict_num, class_num, 256]
-
-            if not self.skip_masked:
-                masked_indices = torch.logical_and(~padding_mask, mask_indices) # [B, T]
-                if not self.ils:
-                    proj_x_m = self.final_proj(x[masked_indices]) # [B, T, 768] -> [TOTAL_T, 256 or 512]
-                    if self.untie_final_proj:
-                        proj_x_m_list = proj_x_m.chunk(len(target_list), dim=-1) # [TOTAL_T, 256*2] -> 2*[TOTAL_T, 256]
-                    else:
-                        proj_x_m_list = [proj_x_m for _ in range(len(target_list))] # [TOTAL_T, 256*2] -> 2*[TOTAL_T, 256]
-
-                    if self.relabel and self.num_updates >= self.relabel_start:
-                        target_shift_left = [
-                            torch.cat([t[:, 1:], t[:, -1:]], dim=-1) for t in target_list
-                        ]
-                        # target_m_list_shift_left = [
-                        #     t[masked_indices] for t in target_shift_left
-                        # ]
-                        target_shift_right = [
-                            torch.cat([t[:, :1], t[:, :-1]], dim=-1) for t in target_list
-                        ]
-                        # target_m_list_shift_right = [
-                        #     t[masked_indices] for t in target_shift_right
-                        # ]    
-                        logit_m_list = [
-                            compute_pred_relabel(proj_x_m, t[masked_indices], tl[masked_indices], tr[masked_indices], label_embs_list[i])
-                            for i, (proj_x_m, t, tl, tr) in enumerate(zip(proj_x_m_list, target_list, target_shift_left, target_shift_right))
-                        ]   
-                    else:
-                        logit_m_list = [
-                            compute_pred(proj_x_m, t[masked_indices], label_embs_list[i])
-                            for i, (proj_x_m, t) in enumerate(zip(proj_x_m_list, target_list))
-                        ]
+        if not self.skip_masked:
+            masked_indices = torch.logical_and(~padding_mask, mask_indices) # [B, T]
+            if not self.ils:
+                proj_x_m = self.final_proj(x[masked_indices]) # [B, T, 768] -> [TOTAL_T, 256 or 512]
+                if self.untie_final_proj:
+                    proj_x_m_list = proj_x_m.chunk(len(target_list), dim=-1) # [TOTAL_T, 256*2] -> 2*[TOTAL_T, 256]
                 else:
-                    proj_x_m_list = []
-                    logit_m_list = []
-                    for idx, layer in enumerate(self.ils_layers):
-                        proj_x_m_list.append(self.final_proj[idx](ils_results[idx][masked_indices]))
-                        layer_target = self.ils_layers_target[idx]
-                        logit_m_list.append(compute_pred(proj_x_m_list[-1], target_list[layer_target][masked_indices], label_embs_list[layer_target]))
+                    proj_x_m_list = [proj_x_m for _ in range(len(target_list))] # [TOTAL_T, 256*2] -> 2*[TOTAL_T, 256]
+
+                logit_m_list = [
+                    compute_pred(proj_x_m, t[masked_indices], label_embs_list[i])
+                    for i, (proj_x_m, t) in enumerate(zip(proj_x_m_list, target_list))
+                ]
             else:
-                logit_m_list = [None for _ in target_list]
-
-            if not self.skip_nomask: # can be optimized
-                nomask_indices = torch.logical_and(~padding_mask, ~mask_indices)
-                if not self.ils:
-                    proj_x_u = self.final_proj(x[nomask_indices])
-                    if self.untie_final_proj:
-                        proj_x_u_list = proj_x_u.chunk(len(target_list), dim=-1)
-                    else:
-                        proj_x_u_list = [proj_x_u for _ in range(len(target_list))]
-
-                    logit_u_list = [
-                        compute_pred(proj_x_u, t[nomask_indices], label_embs_list[i])
-                        for i, (proj_x_u, t) in enumerate(zip(proj_x_u_list, target_list))
-                    ]
-                else:
-                    proj_x_u_list = []
-                    logit_u_list = []
-                    for idx, layer in enumerate(self.ils_layers):
-                        proj_x_u_list.append(self.final_proj[idx](ils_results[idx][nomask_indices]))
-                        layer_target = self.ils_layers_target[idx]
-                        logit_u_list.append(compute_pred(proj_x_u_list[-1], target_list[layer_target][nomask_indices], label_embs_list[layer_target]))
-            else:
-                logit_u_list = [None for _ in target_list]
-
-            result = {
-                "logit_m_list": logit_m_list,
-                "logit_u_list": logit_u_list,
-                "padding_mask": padding_mask,
-                "features_pen": features_pen,
-            }
-            return result
-        
-        else: # cross entropy loss
-            if self.ils:
+                proj_x_m_list = []
                 logit_m_list = []
+                for idx, layer in enumerate(self.ils_layers):
+                    proj_x_m_list.append(self.final_proj[idx](ils_results[idx][masked_indices]))
+                    layer_target = self.ils_layers_target[idx]
+                    logit_m_list.append(compute_pred(proj_x_m_list[-1], target_list[layer_target][masked_indices], label_embs_list[layer_target]))
+        else:
+            logit_m_list = [None for _ in target_list]
+
+        if not self.skip_nomask: # can be optimized
+            nomask_indices = torch.logical_and(~padding_mask, ~mask_indices)
+            if not self.ils:
+                proj_x_u = self.final_proj(x[nomask_indices])
+                if self.untie_final_proj:
+                    proj_x_u_list = proj_x_u.chunk(len(target_list), dim=-1)
+                else:
+                    proj_x_u_list = [proj_x_u for _ in range(len(target_list))]
+
+                logit_u_list = [
+                    compute_pred(proj_x_u, t[nomask_indices], label_embs_list[i])
+                    for i, (proj_x_u, t) in enumerate(zip(proj_x_u_list, target_list))
+                ]
+            else:
+                proj_x_u_list = []
                 logit_u_list = []
-                targ_m_list_all = []
-                targ_u_list_all = []
+                for idx, layer in enumerate(self.ils_layers):
+                    proj_x_u_list.append(self.final_proj[idx](ils_results[idx][nomask_indices]))
+                    layer_target = self.ils_layers_target[idx]
+                    logit_u_list.append(compute_pred(proj_x_u_list[-1], target_list[layer_target][nomask_indices], label_embs_list[layer_target]))
+        else:
+            logit_u_list = [None for _ in target_list]
 
-                masked_indices = torch.logical_and(~padding_mask, mask_indices)
-                nomask_indices = torch.logical_and(~padding_mask, ~mask_indices)
-
-                targ_m_list=target_list[0][masked_indices]
-                targ_m_list=targ_m_list.long()
-                
-                targ_u_list=target_list[0][nomask_indices]
-                targ_u_list = targ_u_list.long()
-                
-                for idx, layer_x in enumerate(ils_results):
-                    if not self.skip_masked:
-                        proj_x_m = self.final_proj[idx](layer_x[masked_indices])
-                        proj_x_m /= self.logit_temp
-                        logit_m_list.append(proj_x_m )
-                    else:
-                        logit_m_list += [None for _ in target_list]
-
-                    if not self.skip_nomask:
-                        proj_x_u = self.final_proj[idx](layer_x[nomask_indices])
-                        proj_x_u /= self.logit_temp
-                        logit_u_list.append(proj_x_u )
-                    else:
-                        logit_u_list += [None for _ in target_list]
-                        
-                    targ_m_list_all.append(targ_m_list)
-                    targ_u_list_all.append(targ_u_list)
-                    
-            else: 
-                if not self.skip_masked:
-                    masked_indices = torch.logical_and(~padding_mask, mask_indices)
-                    proj_x_m = self.final_proj(x[masked_indices])
-                    proj_x_m /= self.logit_temp
-                    logit_m_list = [proj_x_m for _ in range(len(target_list))]
-                else:
-                    logit_m_list = [None for _ in target_list]
-
-                if not self.skip_nomask:
-                    nomask_indices = torch.logical_and(~padding_mask, ~mask_indices)
-                    proj_x_u = self.final_proj(x[nomask_indices])
-                    proj_x_u /= self.logit_temp
-                    logit_u_list = [proj_x_u for _ in range(len(target_list))]
-                else:
-                    logit_u_list = [None for _ in target_list]
-
-                targ_m_list=target_list[0][masked_indices]
-                targ_m_list=targ_m_list.long()
-                targ_m_list_all = [targ_m_list for _ in range(len(target_list))]
-
-                targ_u_list=target_list[0][nomask_indices]
-                targ_u_list = targ_u_list.long()
-                targ_u_list_all = [targ_u_list for _ in range(len(target_list))]
-            
-
-            result = {
-                "logit_m_list": logit_m_list,
-                "logit_u_list": logit_u_list,
-                "padding_mask": padding_mask, 
-                "targ_m_list": targ_m_list_all,
-                "targ_u_list": targ_u_list_all,
-            }
-            return result
-
+        result = {
+            "logit_m_list": logit_m_list,
+            "logit_u_list": logit_u_list,
+            "padding_mask": padding_mask,
+            "features_pen": features_pen,
+        }
+        return result
 
     def extract_features(
         self,

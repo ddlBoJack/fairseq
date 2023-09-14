@@ -8,27 +8,35 @@ import re
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-from omegaconf import II
-
 import torch
 import torch.nn.functional as F
 from fairseq import metrics, utils
 from fairseq.criterions import FairseqCriterion, register_criterion
 from fairseq.dataclass import FairseqDataclass
 
-from fairseq.criterions.hubert_criterion import HubertCriterionConfig
-
 
 @dataclass
-class HubertModifiedCriterionConfig(HubertCriterionConfig):
-    hubert_cross_entropy: bool = field(
-        default=False,
-        metadata={"help": "use cross entropy loss instead of using a codebook"},
+class Multi2VecCriterionConfig(FairseqDataclass):
+    pred_masked_weight: float = field(
+        default=1.0,
+        metadata={"help": "weight for predictive loss for masked frames"},
+    )
+    pred_nomask_weight: float = field(
+        default=0.0,
+        metadata={"help": "weight for predictive loss for unmasked frames"},
+    )
+    loss_weights: Optional[List[float]] = field(
+        default=None,
+        metadata={"help": "weights for additional loss terms (not first one)"},
+    )
+    log_keys: List[str] = field(
+        default_factory=lambda: [],
+        metadata={"help": "output keys to log"},
     )
 
 
-@register_criterion("hubert_modified", dataclass=HubertModifiedCriterionConfig)
-class HubertModifiedCriterion(FairseqCriterion):
+@register_criterion("multi2vec", dataclass=Multi2VecCriterionConfig)
+class Multi2VecCriterion(FairseqCriterion):
     def __init__(
         self,
         task,
@@ -36,14 +44,12 @@ class HubertModifiedCriterion(FairseqCriterion):
         pred_nomask_weight,
         loss_weights=None,
         log_keys=None,
-        hubert_cross_entropy=False,
     ):
         super().__init__(task)
         self.pred_masked_weight = pred_masked_weight
         self.pred_nomask_weight = pred_nomask_weight
         self.loss_weights = loss_weights
         self.log_keys = [] if log_keys is None else log_keys
-        self.hubert_cross_entropy = hubert_cross_entropy
 
     def forward(self, model, sample, reduce=True, log_pred=False):
         """Compute the loss for the given sample.
@@ -60,10 +66,7 @@ class HubertModifiedCriterion(FairseqCriterion):
 
         loss_m_list = []
         logp_m_list = model.get_logits(net_output, True)
-        if self.hubert_cross_entropy and "targ_m_list" in net_output and net_output["targ_m_list"] is not None:
-            targ_m_list = net_output["targ_m_list"]
-        else:
-            targ_m_list = model.get_targets(net_output, True) # index 0 is the ground truth
+        targ_m_list = model.get_targets(net_output, True)
         assert self.pred_masked_weight == 0 or len(logp_m_list) > 0
         for i, (logp_m, targ_m) in enumerate(zip(logp_m_list, targ_m_list)):
             loss_m = F.cross_entropy(logp_m, targ_m, reduction=reduction)
@@ -73,13 +76,9 @@ class HubertModifiedCriterion(FairseqCriterion):
             loss += self.pred_masked_weight * sum(loss_m_list)
             sample_size += targ_m_list[0].numel()
 
-        # can be optmized
         loss_u_list = []
         logp_u_list = model.get_logits(net_output, False)
-        if self.hubert_cross_entropy and "targ_u_list" in net_output and net_output["targ_u_list"] is not None:
-            targ_u_list = net_output["targ_u_list"]
-        else:
-            targ_u_list = model.get_targets(net_output, False)
+        targ_u_list = model.get_targets(net_output, False)
         assert self.pred_nomask_weight == 0 or len(logp_u_list) > 0
         for i, (logp_u, targ_u) in enumerate(zip(logp_u_list, targ_u_list)):
             loss_u = F.cross_entropy(logp_u, targ_u, reduction=reduction)

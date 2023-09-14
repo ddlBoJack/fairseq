@@ -311,8 +311,9 @@ def load_checkpoint_to_cpu(path, arg_overrides=None, load_on_all_ranks=False):
             torch.distributed.barrier()
         local_path = PathManager.get_local_path(path)
     
-    # if not local_path.startswith("/data"):
-    #     local_path="/data/zym22/models/multi2vec/hubert_baseline/checkpoint200.pt" #load pretrain model to work
+    # if not local_path == "/mnt/maziyang.mzy/models/tribert/u_bpephn500/checkpoint_last.pt":
+        # local_path="/mnt/lustre/sjtu/home/zym22/models/tribert/u_bpephn500/checkpoint_last.pt" #load pretrain model to work
+    # print("local_path", local_path)
     with open(local_path, "rb") as f:
         state = torch.load(f, map_location=torch.device("cpu"))
 

@@ -1,0 +1,1 @@
+from .model_criterion import Emotion2VecCriterion

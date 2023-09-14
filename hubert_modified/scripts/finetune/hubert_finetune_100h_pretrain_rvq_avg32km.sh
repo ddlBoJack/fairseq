@@ -5,8 +5,8 @@ export HYDRA_FULL_ERROR=1
 cd ~/fairseq
 
 # edit your exp
-model_name=tribert
-exp_name=u_triphone540_hierarchical
+model_name=hubert_modified
+exp_name=hubert_pretrain_rvq_avg32km_hubertloss
 checkpoint=checkpoint_last
 finetune=train_100h
 model_path=~/models/${model_name}/${exp_name}/${checkpoint}/${finetune}
@@ -14,13 +14,13 @@ mkdir -p ${model_path}
 mkdir -p ${model_path}/tensorboard
 mkdir -p ${model_path}/log
 
-export CUDA_VISIBLE_DEVICES=0,1,2,7
+export CUDA_VISIBLE_DEVICES=0,1,2,3
 echo "Start finetuning!!!"
 echo -e '\n'
 # finetune
 # python -m debugpy --listen 5678 --wait-for-client fairseq_cli/hydra_train.py  \
 python fairseq_cli/hydra_train.py  \
---config-dir  /mnt/lustre/sjtu/home/zym22/fairseq/tribert/config/finetune \
+--config-dir  /mnt/lustre/sjtu/home/zym22/fairseq/hubert_modified/config/finetune \
 --config-name hubert_base_10h  \
 checkpoint.save_interval=1 \
 checkpoint.keep_last_epochs=-1 \
@@ -41,12 +41,13 @@ distributed_training.distributed_world_size=4 \
 optimization.update_freq=[2] \
 optimization.max_update=80000 \
 optimization.lr=[0.00003] \
-model.w2v_path=/mnt/lustre/sjtu/home/zym22/models/tribert/u_triphone540_hierarchical/checkpoint_last.pt \
+model.w2v_path=/mnt/lustre/sjtu/home/zym22/models/hubert_modified/hubert_pretrain_rvq_avg32km_hubertloss/checkpoint_last.pt \
 model.freeze_finetune_updates=10000 \
 common.log_interval=200 \
-common.tensorboard_logdir=${model_path}/tensorboard \
 common.log_file=${model_path}/log/hydra_train.log \
+common.user_dir=hubert_modified \
 common.wandb_project=tribert \
+# common.tensorboard_logdir=${model_path}/tensorboard \
 # +criterion.wer_kenlm_model=${kenlm_model_path}  \
 # +criterion.wer_lexicon=${lexicon_path}  \
 # +criterion.wer_lm_weight=2 \

@@ -1,0 +1,115 @@
+# @package _group_
+
+common:
+  fp16: true
+  log_format: json
+  log_interval: 200
+  # seed: 1337
+  tensorboard_logdir: tblog
+
+checkpoint:
+  save_interval_updates: 25000
+  keep_interval_updates: 1
+  no_epoch_checkpoints: true
+
+
+distributed_training:
+  ddp_backend: no_c10d
+  # distributed_backend: 'nccl'
+  distributed_world_size: 32
+  # distributed_port: 29671
+  # nprocs_per_node: 8
+  # find_unused_parameters: true
+
+task:
+  _name: hubert_pretraining
+  data: ???
+  label_dir: ???
+  labels: ???
+  label_rate: 50
+  sample_rate: 16000
+  max_sample_size: 320000 # 250000
+  min_sample_size: 32000
+  pad_audio: false
+  random_crop: true
+  normalize: true # hubert: false, must be consistent with extractor
+
+dataset:
+  num_workers: 6
+  max_tokens: 1400000
+  skip_invalid_size_inputs_valid_test: true
+  validate_interval: 5
+  # validate_interval_updates: 10000
+
+criterion:
+  _name: hubert
+  pred_masked_weight: 1.0
+  pred_nomask_weight: 0.0
+  # loss_weights: [10,]
+  log_keys:
+    - ema_decay
+    - target_var
+    - pred_var
+
+optimization:
+  max_update: 400000
+  lr: [0.0005]
+  clip_norm: 10.0
+
+optimizer:
+  _name: adam
+  adam_betas: (0.9,0.98)
+  adam_eps: 1e-06
+  weight_decay: 0.01
+
+lr_scheduler:
+  # _name: polynomial_decay
+  # warmup_updates: 32000
+  _name: tri_stage
+  phase_ratio: [0.03,0.9,0.07]
+
+model:
+  _name: data2vec_audio
+  extractor_mode: layer_norm
+  encoder_layerdrop: 0.05
+  dropout_input: 0.0
+  dropout_features: 0.0
+  feature_grad_mult: 1.0
+  encoder_embed_dim: 768
+
+  mask_prob: 0.65
+  mask_length: 10
+
+  loss_beta: 0
+  loss_scale: null
+
+  instance_norm_target_layer: true
+  average_top_k_layers: 8
+
+  pos_conv_depth: 5
+  conv_pos: 95
+
+  ema_decay: 0.999
+  ema_end_decay: 0.9999
+  ema_anneal_end_step: 30000
+  ema_transformer_only: true
+  ema_layers_only: true
+
+  require_same_masks: true
+  mask_dropout: 0
+
+hydra:
+  job:
+    config:
+      override_dirname:
+        kv_sep: '-'
+        item_sep: '__'
+        exclude_keys:
+          - run
+          - task.data
+          - task.label_dir
+  run:
+    dir: ???
+  sweep:
+    dir: ???
+    subdir: ${hydra.job.config_name}__${hydra.job.override_dirname}

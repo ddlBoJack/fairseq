@@ -6,7 +6,7 @@ cd ~/fairseq
 
 # edit your exp
 model_name=tribert
-exp_name=u_triphone540_hierarchical
+exp_name=u_triphone1744_hmmdmm
 checkpoint=checkpoint_last
 finetune=train_100h
 model_path=~/models/${model_name}/${exp_name}/${checkpoint}/${finetune}
@@ -14,7 +14,7 @@ mkdir -p ${model_path}
 mkdir -p ${model_path}/tensorboard
 mkdir -p ${model_path}/log
 
-export CUDA_VISIBLE_DEVICES=0,1,2,7
+export CUDA_VISIBLE_DEVICES=0,1,2,3
 echo "Start finetuning!!!"
 echo -e '\n'
 # finetune
@@ -41,12 +41,12 @@ distributed_training.distributed_world_size=4 \
 optimization.update_freq=[2] \
 optimization.max_update=80000 \
 optimization.lr=[0.00003] \
-model.w2v_path=/mnt/lustre/sjtu/home/zym22/models/tribert/u_triphone540_hierarchical/checkpoint_last.pt \
+model.w2v_path=/mnt/lustre/sjtu/home/zym22/models/tribert/u_triphone1744_hmmdmm/checkpoint_last.pt \
 model.freeze_finetune_updates=10000 \
 common.log_interval=200 \
-common.tensorboard_logdir=${model_path}/tensorboard \
 common.log_file=${model_path}/log/hydra_train.log \
 common.wandb_project=tribert \
+# common.tensorboard_logdir=${model_path}/tensorboard \
 # +criterion.wer_kenlm_model=${kenlm_model_path}  \
 # +criterion.wer_lexicon=${lexicon_path}  \
 # +criterion.wer_lm_weight=2 \
