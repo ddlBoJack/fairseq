@@ -9,7 +9,8 @@ from dataclasses import dataclass, field
 from tkinter import N
 from typing import Optional
 
-from omegaconf import II
+from omegaconf import II, DictConfig
+from argparse import Namespace
 
 import torch
 import torch.nn as nn
@@ -29,7 +30,7 @@ from fairseq.modules import (
     LayerNorm,
 )
 from fairseq.utils import index_put
-
+from fairseq.dataclass.utils import convert_namespace_to_omegaconf
 
 logger = logging.getLogger(__name__)
 
@@ -93,12 +94,29 @@ class Emotion2VecConfig(Wav2Vec2Config):
         metadata={"help": "whether to use mse loss"},
     )
 
+    adversarial_hidden_dim: Optional[int] = field(
+        default=128,
+        metadata={"help": "hidden dim for adversarial training"},
+    )
+    adversarial_weight: Optional[float] = field(
+        default=0.1,
+        metadata={"help": "weight for adversarial training"},
+    )
+
 
 def get_annealed_rate(start, end, curr_step, total_steps):
     r = end - start
     pct_remaining = 1 - curr_step / total_steps
     return end - r * pct_remaining
 
+class GradientReversalFn(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x):
+        return x.view_as(x)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return grad_output.neg()
 
 @register_model("emotion2vec", dataclass=Emotion2VecConfig)
 class Emotion2VecModel(BaseFairseqModel):
@@ -160,6 +178,13 @@ class Emotion2VecModel(BaseFairseqModel):
         if cfg.ce_loss == True:
             self.final_proj_hubert = nn.Linear(self.embed, len(task.discrete_dictionary)) # v-ziyangma: 768 -> 504
             # self.final_proj_hubert = nn.Linear(self.embed, 504) # v-ziyangma: 768 -> 504
+
+        self.adversarial_training = task.cfg.adversarial_training
+        if self.adversarial_training:
+            self.adversarial_proj = nn.Linear(self.embed, cfg.adversarial_hidden_dim)
+            self.aadversarial_activation = nn.ReLU()
+            self.adversarial_proj_head = nn.Linear(cfg.adversarial_hidden_dim, 1)
+            self.adversarial_weight = cfg.adversarial_weight
 
         self.num_updates = 0
         
@@ -230,6 +255,33 @@ class Emotion2VecModel(BaseFairseqModel):
             self.ema.restore(state_dict[k], True)
             del state_dict[k]
         return super()._load_from_state_dict(state_dict, prefix, *args, **kwargs)
+    
+    def load_state_dict(
+        self,
+        state_dict,
+        strict=True,
+        model_cfg: Optional[DictConfig] = None,
+        args: Optional[Namespace] = None,
+    ):
+        """
+        Copy from fairseq_model.py, ad-hoc for adversarial training.
+        """
+
+        if model_cfg is None and args is not None:
+            logger.warn(
+                "using 'args' is deprecated, please update your code to use dataclass config"
+            )
+            model_cfg = convert_namespace_to_omegaconf(args).model
+        
+        self.upgrade_state_dict(state_dict)
+        
+        from fairseq.checkpoint_utils import prune_state_dict
+        new_state_dict = prune_state_dict(state_dict, model_cfg)
+
+        if self.adversarial_training:
+            return super().load_state_dict(new_state_dict, False)
+        return super().load_state_dict(new_state_dict, strict)
+        
 
     @classmethod
     def build_model(cls, cfg: Emotion2VecConfig, task=None):
@@ -327,6 +379,7 @@ class Emotion2VecModel(BaseFairseqModel):
     def forward(
         self,
         source,
+        dataset_idx=None,
         padding_mask=None,
         mask=True,
         features_only=False,
@@ -408,6 +461,20 @@ class Emotion2VecModel(BaseFairseqModel):
         result = {
             "losses": {},
         }
+
+        if self.adversarial_training and dataset_idx is not None and len(set(dataset_idx.cpu().numpy())) > 1: #  there are more than one domain in the batch
+            assert self.adversarial_proj is not None, "adversarial_proj is None"
+            assert self.aadversarial_activation is not None, "aadversarial_activation is None"
+            assert self.adversarial_proj_head is not None, "adversarial_proj_head is None"
+            assert self.adversarial_weight is not None, "adversarial_weight is None"
+
+            # domain classifier loss
+            x_c = GradientReversalFn.apply(x.mean(dim=1))
+            x_c = self.adversarial_proj(x_c)
+            x_c = self.aadversarial_activation(x_c)
+            x_c = self.adversarial_proj_head(x_c)
+            loss_domain = nn.BCEWithLogitsLoss()(x_c.squeeze(), dataset_idx.float())
+            result["losses"]["domain"] = loss_domain * self.adversarial_weight * mask_indices.sum().item() # mask_indices.sum().item() is used to scale the loss to algin with MLM loss
 
         if self.final_proj_hubert is not None:
             x_hubert = x[mask_indices]
@@ -577,3 +644,11 @@ class Emotion2VecModel(BaseFairseqModel):
             self.encoder.layers = nn.ModuleList(
                 l for i, l in enumerate(self.encoder.layers) if i <= last_layer
             )
+        if self.adversarial_proj is not None:
+            self.adversarial_proj = None
+        if self.aadversarial_activation is not None:
+            self.aadversarial_activation = None
+        if self.adversarial_proj_head is not None:
+            self.adversarial_proj_head = None
+        if self.adversarial_weight is not None:
+            self.adversarial_weight = None

@@ -1,1 +1,1 @@
-from .raw_audio_dataset import Emotion2VecFileAudioDataset
+from .raw_audio_dataset import Emotion2VecFileAudioDataset, Emotion2VecConcatDataset

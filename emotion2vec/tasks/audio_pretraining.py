@@ -19,7 +19,7 @@ from fairseq.dataclass import FairseqDataclass, ChoiceEnum
 from fairseq.data.text_compressor import TextCompressor, TextCompressionLevel
 
 from fairseq.tasks import FairseqTask, register_task
-from ..data import Emotion2VecFileAudioDataset
+from ..data import Emotion2VecFileAudioDataset, Emotion2VecConcatDataset
 
 
 logger = logging.getLogger(__name__)
@@ -131,6 +131,18 @@ class Emotion2VecPretrainingConfig(FairseqDataclass):
             "help": "extension of the label files to load, frame-level label for pre-training",
         },
     )
+    adversarial_training: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "if set, use adversarial training, including adversarial loss and adversarial dataset",
+        },
+    )
+    adversarial_subset: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "if set, use adversarial subset for adversarial training",
+        },
+    )
 
 
 @register_task("emotion2vec_pretraining", dataclass=Emotion2VecPretrainingConfig)
@@ -219,6 +231,23 @@ class Emotion2VecPretrainingTask(FairseqTask):
                 text_compression_level=text_compression_level,
                 **self._get_mask_precompute_kwargs(task_cfg),
             )
+
+        if self.cfg.adversarial_training: # dataset.disable_validation=true, so adversarial_manifest_path do not affect validation
+            adversarial_manifest_path = os.path.join(data_path, "{}.tsv".format(self.cfg.adversarial_subset))
+            self.adversarial_dataset = Emotion2VecFileAudioDataset(
+                manifest_path=adversarial_manifest_path,
+                sample_rate=task_cfg.get("sample_rate", self.cfg.sample_rate),
+                max_sample_size=self.cfg.max_sample_size,
+                min_sample_size=self.cfg.min_sample_size,
+                pad=task_cfg.labels is not None or task_cfg.enable_padding,
+                normalize=task_cfg.normalize,
+                num_buckets=self.cfg.num_batch_buckets or int(self.cfg.tpu),
+                compute_mask_indices=(self.cfg.precompute_mask_indices or self.cfg.tpu),
+                text_compression_level=text_compression_level,
+                **self._get_mask_precompute_kwargs(task_cfg),
+            )
+            self.datasets[split] = Emotion2VecConcatDataset([self.datasets[split], self.adversarial_dataset])
+
 
         if self.cfg.tpu and task_cfg.inferred_w2v_config.mask_channel_prob == 0.0:
             logger.info(
