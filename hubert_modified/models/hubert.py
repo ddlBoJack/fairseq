@@ -57,6 +57,10 @@ class HubertModifiedConfig(HubertConfig):
         default=None,
         metadata={"help": "which step to start relabeling"},
     )
+    cross_entropy: bool = field(
+        default=False,
+        metadata={"help": "use cross entropy loss instead of using a codebook"},
+    ) # TODO
 
 
 @register_model("hubert_modified", dataclass=HubertModifiedConfig)

@@ -42,6 +42,10 @@ class HubertModifiedPretrainingConfig(HubertPretrainingConfig):
         default=False,
         metadata={"help": "use lmdb dataset"},
     )
+    parallel_lmdb: bool = field(
+        default=False,
+        metadata={"help": "use parallel lmdb dataset"},
+    )
 
 
 @register_task("hubert_modified_pretraining", dataclass=HubertModifiedPretrainingConfig)
@@ -106,6 +110,8 @@ class HubertModifiedPretrainingTask(FairseqTask):
         eos_list = [dict.eos() for dict in dicts]
         procs = [LabelEncoder(dict) for dict in dicts]
         paths = [f"{self.get_label_dir()}/{split}.{l}" for l in self.cfg.labels]
+        if split == "train_960_parallel": #ad-hoc solution for parallel training on pai
+            paths = [f"{self.get_label_dir()}/train_960.{l}" for l in self.cfg.labels]
 
         if self.cfg.use_lmdb:
             self.datasets[split] = HubertLmdbDataset(
@@ -124,6 +130,7 @@ class HubertModifiedPretrainingTask(FairseqTask):
                 store_labels=False,
                 random_crop=self.cfg.random_crop,
                 single_target=self.cfg.single_target,
+                parallel=self.cfg.parallel_lmdb,
             )
             return
 

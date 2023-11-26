@@ -6,21 +6,21 @@ cd /mnt/maziyang.mzy/code/fairseq
 
 # edit your exp
 model_name=tribert
-exp_name=u_monophone_baseline
-checkpoint=checkpoint50
+exp_name=u_bpephn500
+checkpoint=checkpoint_last
 finetune=train_100h
 model_path=/mnt/maziyang.mzy/models/${model_name}/${exp_name}/${checkpoint}/${finetune}
 mkdir -p ${model_path}
 mkdir -p ${model_path}/tensorboard
 mkdir -p ${model_path}/log
 
-export CUDA_VISIBLE_DEVICES=4,5,6,7
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 echo "Start finetuning!!!"
 echo -e '\n'
 # finetune
 # python -m debugpy --listen 5678 --wait-for-client fairseq_cli/hydra_train.py  \
 python fairseq_cli/hydra_train.py  \
---config-dir  /mnt/maziyang.mzy/code/fairseq/tribert/config/finetune \
+--config-dir /mnt/maziyang.mzy/code/fairseq/tribert/config/finetune \
 --config-name hubert_base_10h  \
 checkpoint.save_interval=1 \
 checkpoint.keep_last_epochs=-1 \
@@ -33,15 +33,15 @@ task.data=/mnt/maziyang.mzy/data/LibriSpeech/manifest/resource  \
 task.label_dir=/mnt/maziyang.mzy/data/LibriSpeech/manifest/resource \
 dataset.train_subset=train_clean_100  \
 dataset.valid_subset=dev_other  \
-dataset.num_workers=2 \
+dataset.num_workers=4 \
 dataset.max_tokens=3200000  \
 dataset.validate_interval=1 \
 dataset.validate_after_updates=20000 \
-distributed_training.distributed_world_size=4 \
-optimization.update_freq=[2] \
+distributed_training.distributed_world_size=8 \
+optimization.update_freq=[1] \
 optimization.max_update=80000 \
 optimization.lr=[0.00003] \
-model.w2v_path=/mnt/maziyang.mzy/models/tribert/u_monophone_baseline/checkpoint50.pt \
+model.w2v_path=/mnt/maziyang.mzy/models/tribert/u_bpephn500/checkpoint_last.pt \
 model.freeze_finetune_updates=10000 \
 common.log_interval=200 \
 common.log_file=${model_path}/log/hydra_train.log \

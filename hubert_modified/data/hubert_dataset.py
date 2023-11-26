@@ -47,6 +47,8 @@ def load_audio(manifest_path, max_keep, min_keep):
     )
     return root, names, inds, tot, sizes
 
+def load_audio_and_wavs(manifest_path, max_keep, min_keep): # tmporarily added for lmdb
+    pass
 
 def load_label(label_path, inds, tot):
     with open(label_path) as f:
@@ -127,6 +129,7 @@ class HubertLmdbDataset(HubertDataset):
         store_labels: bool = True,
         random_crop: bool = False,
         single_target: bool = False,
+        parallel: bool = False,
     ):
         self.audio_root, self.audio_names, inds, tot, self.sizes = load_audio(
             manifest_path, max_keep_sample_size, min_keep_sample_size
@@ -168,6 +171,7 @@ class HubertLmdbDataset(HubertDataset):
             f"pad_audio={pad_audio}, random_crop={random_crop}, "
             f"normalize={normalize}, max_sample_size={self.max_sample_size}"
         )
+        self.parallel = parallel
 
     def get_audio(self, index):
         # import soundfile as sf
@@ -178,6 +182,13 @@ class HubertLmdbDataset(HubertDataset):
         # wav = self.postprocess(wav, cur_sample_rate)
         # return wav
 
+        root = self.audio_root
+        wav_path = self.audio_names[index]
+        if self.parallel:
+            dir_list = self.audio_names[index].split("/")
+            parallel_index = dir_list[0]
+            root = os.path.join(self.audio_root, parallel_index)
+            wav_path = os.path.join(*dir_list[1:])
         import lmdb
         '''
         readonly:
@@ -189,9 +200,9 @@ class HubertLmdbDataset(HubertDataset):
         meminit:
         If False LMDB will not zero-initialize buffers prior to writing them to disk. This improves performance but may cause old heap data to be written saved in the unused portion of the buffer. Do not use this option if your application manipulates confidential data (e.g. plaintext passwords) in memory. This option is only meaningful when writemap=False; new pages are always zero-initialized when writemap=True.
         '''
-        with lmdb.open(self.audio_root, readonly=True, lock=False, readahead=False, meminit=False) as env:
+        with lmdb.open(root, readonly=True, lock=False, readahead=False, meminit=False) as env:
             with env.begin(write=False) as txn:
-                wav = txn.get(self.audio_names[index].encode())
+                wav = txn.get(wav_path.encode())
                 wav = torch.from_numpy(np.frombuffer(wav, dtype=np.float32).copy())
                 wav = self.postprocess(wav, self.sample_rate)
                 return wav
