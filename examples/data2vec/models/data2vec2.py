@@ -11,6 +11,8 @@ from functools import partial
 import numpy as np
 
 from omegaconf import II
+from omegaconf import II, DictConfig
+from argparse import Namespace
 
 import torch
 import torch.nn as nn
@@ -48,6 +50,8 @@ from examples.data2vec.models.modalities.text import (
     D2vTextConfig,
     TextEncoder,
 )
+
+from fairseq.dataclass.utils import convert_namespace_to_omegaconf
 
 logger = logging.getLogger(__name__)
 
@@ -142,9 +146,35 @@ class Data2VecMultiConfig(FairseqDataclass):
 
     cls_loss: float = 0
     recon_loss: float = 0
-    d2v_loss: float = 1
+    d2v_loss: float = 0
 
     decoder_group: bool = False
+
+    adversarial_training: Optional[bool] = field(
+        default=False,
+        metadata={"help": "whether to use adversarial training between different corpus"},
+    )
+    adversarial_hidden_dim: Optional[int] = field(
+        default=128,
+        metadata={"help": "hidden dim for adversarial training"},
+    )
+    adversarial_weight: Optional[float] = field(
+        default=0.1,
+        metadata={"help": "weight for adversarial training"},
+    )
+    cls_type: Optional[str] = field(
+        default="single",
+        metadata={"help": "type of utterance-level loss"},
+    )
+
+class GradientReversalFn(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x):
+        return x.view_as(x)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return grad_output.neg()
 
 
 @register_model("data2vec_multi", dataclass=Data2VecMultiConfig)
@@ -267,6 +297,13 @@ class Data2VecMultiModel(BaseFairseqModel):
             if cfg.decoder_group and "decoder" in pn:
                 p.param_group = "decoder"
 
+        self.adversarial_training = cfg.adversarial_training
+        if self.adversarial_training:
+            self.adversarial_proj = nn.Linear(cfg.embed_dim, cfg.adversarial_hidden_dim)
+            self.aadversarial_activation = nn.ReLU()
+            self.adversarial_proj_head = nn.Linear(cfg.adversarial_hidden_dim, 1)
+            self.adversarial_weight = cfg.adversarial_weight
+
         self.num_updates = 0
 
     def _init_weights(self, m):
@@ -374,6 +411,32 @@ class Data2VecMultiModel(BaseFairseqModel):
 
         return super()._load_from_state_dict(state_dict, prefix, *args, **kwargs)
 
+    def load_state_dict(
+        self,
+        state_dict,
+        strict=True,
+        model_cfg: Optional[DictConfig] = None,
+        args: Optional[Namespace] = None,
+    ):
+        """
+        Copy from fairseq_model.py, ad-hoc for adversarial training.
+        """
+
+        if model_cfg is None and args is not None:
+            logger.warn(
+                "using 'args' is deprecated, please update your code to use dataclass config"
+            )
+            model_cfg = convert_namespace_to_omegaconf(args).model
+
+        self.upgrade_state_dict(state_dict)
+
+        from fairseq.checkpoint_utils import prune_state_dict
+        new_state_dict = prune_state_dict(state_dict, model_cfg)
+
+        if self.adversarial_training or self.modality_encoders[self.cfg.supported_modality.name].modality_cfg.num_extra_tokens > 0:
+            return super().load_state_dict(new_state_dict, False)
+        return super().load_state_dict(new_state_dict, strict)
+
     @classmethod
     def build_model(cls, cfg: Data2VecMultiConfig, task=None):
         """Build a new model instance."""
@@ -403,6 +466,7 @@ class Data2VecMultiModel(BaseFairseqModel):
         force_remove_masked=False,
         remove_extra_tokens=True,
         precomputed_mask=None,
+        **kwargs,
     ):
         if mode is None:
             assert self.cfg.supported_modality is not None
@@ -617,7 +681,12 @@ class Data2VecMultiModel(BaseFairseqModel):
             cls_target = orig_targets.mean(dim=1)
             if self.cfg.clone_batch > 1:
                 cls_target = cls_target.repeat_interleave(self.cfg.clone_batch, 0)
-            cls_pred = x[:, extra_tokens - 1]
+            if self.cfg.cls_type == "single": # use the first extra_token
+                cls_pred = x[:, extra_tokens - 1]
+            elif self.cfg.cls_type == "chunk": # average over the first extra_tokens
+                cls_pred = x[:, :extra_tokens].mean(dim=1)
+            elif self.cfg.cls_type == "global": # average over all frames except the first extra_tokens
+                cls_pred = x[:, extra_tokens:].mean(dim=1)
             result["losses"]["cls"] = self.d2v_loss(cls_pred, cls_target) * (
                 self.cfg.cls_loss * sample_size
             )
@@ -649,6 +718,67 @@ class Data2VecMultiModel(BaseFairseqModel):
                 reg_loss = self.d2v_loss(x, y)
                 n = f"{mode}_regression_{i}" if len(xs) > 1 else f"{mode}_regression"
                 result["losses"][n] = reg_loss * self.cfg.d2v_loss
+        
+        if self.adversarial_training and self.training and "dataset_idx" in kwargs: 
+            assert self.adversarial_proj is not None, "adversarial_proj is None"
+            assert self.aadversarial_activation is not None, "aadversarial_activation is None"
+            assert self.adversarial_proj_head is not None, "adversarial_proj_head is None"
+            assert self.adversarial_weight is not None, "adversarial_weight is None"
+
+            adversarial_extractor_out = feature_extractor(
+            source,
+            padding_mask,
+            mask=False,
+            remove_masked=not self.adversarial_training or force_remove_masked
+            )
+            adversarial_x = adversarial_extractor_out["x"]
+            adversarial_masked_padding_mask = adversarial_extractor_out["padding_mask"]
+            adversarial_masked_alibi_bias = adversarial_extractor_out.get("alibi_bias", None)
+            adversarial_alibi_scale = adversarial_extractor_out.get("alibi_scale", None)
+            
+            if self.dropout_input is not None:
+                adversarial_x = self.dropout_input(adversarial_x)
+
+            adversarial_layer_results = []
+            for i, blk in enumerate(self.blocks):
+                if (
+                    not self.training
+                    or self.cfg.layerdrop == 0
+                    or (np.random.random() > self.cfg.layerdrop)
+                ):
+                    ab = adversarial_masked_alibi_bias
+                    if ab is not None and adversarial_alibi_scale is not None:
+                        scale = (
+                            adversarial_alibi_scale[i]
+                            if adversarial_alibi_scale.size(0) > 1
+                            else adversarial_alibi_scale.squeeze(0)
+                        )
+                        ab = ab * scale.type_as(ab)
+
+                    adversarial_x, lr = blk(
+                        adversarial_x,
+                        padding_mask=adversarial_masked_padding_mask,
+                        alibi_bias=ab,
+                    )
+                    if features_only:
+                        adversarial_layer_results.append(lr)
+
+            if self.norm is not None:
+                adversarial_x = self.norm(adversarial_x)
+
+            dataset_idx = kwargs["dataset_idx"]
+
+            # domain classifier loss
+            x_c = GradientReversalFn.apply(adversarial_x.mean(dim=1))
+            x_c = self.adversarial_proj(x_c)
+            x_c = self.aadversarial_activation(x_c)
+            x_c = self.adversarial_proj_head(x_c)
+            try:
+                loss_domain = nn.BCEWithLogitsLoss()(x_c.squeeze(), dataset_idx.float())
+                result["losses"]["domain"] = loss_domain * self.adversarial_weight * sample_size.item() # mask_indices.sum().item() is used to scale the loss to algin with MLM loss
+            except:
+                pass
+            
 
         suffix = "" if len(self.modalities) == 1 else f"_{mode}"
         with torch.no_grad():
@@ -811,3 +941,12 @@ class Data2VecMultiModel(BaseFairseqModel):
                 )
                 if not keep_decoder:
                     self.modality_encoders[k].decoder = None
+
+        if self.adversarial_proj is not None:
+            self.adversarial_proj = None
+        if self.aadversarial_activation is not None:
+            self.aadversarial_activation = None
+        if self.adversarial_proj_head is not None:
+            self.adversarial_proj_head = None
+        if self.adversarial_weight is not None:
+            self.adversarial_weight = None

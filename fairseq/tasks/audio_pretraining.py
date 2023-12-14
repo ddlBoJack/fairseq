@@ -20,6 +20,7 @@ from fairseq.dataclass import FairseqDataclass, ChoiceEnum
 from fairseq.data.text_compressor import TextCompressionLevel
 
 from . import FairseqTask, register_task
+from examples.data2vec.data import MultimodalDataset
 
 
 logger = logging.getLogger(__name__)
@@ -97,6 +98,15 @@ class AudioPretrainingConfig(FairseqDataclass):
 
     subsample: float = 1
     seed: int = II("common.seed")
+
+    sort_indices_mutiple_corpora: Optional[bool] = field(
+        default=True,
+        metadata={"help": "Sort indices for multiple corpora"}
+    )
+    batch_sample_multiple_corpora: Optional[bool] = field(
+        default=False,
+        metadata={"help": "Sample batches from multiple corpora"}
+    )
 
 
 @register_task("audio_pretraining", dataclass=AudioPretrainingConfig)
@@ -199,7 +209,7 @@ class AudioPretrainingTask(FairseqTask):
                 if len(dataset_map) == 1:
                     self.datasets[split] = list(dataset_map.values())[0]
                 else:
-                    self.datasets[split] = MultiCorpusDataset(dataset_map, distribution=data_weights, seed=0, sort_indices=True)
+                    self.datasets[split] = MultimodalDataset(dataset_map, distribution=data_weights, seed=0, sort_indices=task_cfg.sort_indices_mutiple_corpora, batch_sample=task_cfg.batch_sample_multiple_corpora)
 
         if getattr(task_cfg, "subsample", 1) < 1:
             self.datasets[split] = SubsampleDataset(
