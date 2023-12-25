@@ -261,7 +261,8 @@ class AudioClassificationModel(BaseFairseqModel):
         if state is not None and not cfg.no_pretrained_weights:
             self.load_model_weights(state, model, cfg)
 
-        d = d2v_args.model.encoder_embed_dim
+        # d = d2v_args.model.encoder_embed_dim
+        d = d2v_args.model.embed_dim # FIX
 
         self.d2v_model = model
 
@@ -608,7 +609,14 @@ class AudioClassificationModel(BaseFairseqModel):
         }
 
         if not self.training:
-            result["_predictions"] = torch.sigmoid(x) if logits else x
-            result["_targets"] = label
+            # result["_predictions"] = torch.sigmoid(x) if logits else x
+            # result["_targets"] = label
+            
+            # FIX for single-class classification
+            with torch.no_grad():
+                pred = x.argmax(-1)
+                label = label.argmax(-1)
+                correct = (pred == label).sum()
+                result["correct"] = correct
 
         return result

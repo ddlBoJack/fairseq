@@ -5,7 +5,7 @@ common:
   log_format: json
   log_interval: 200
   all_gather_list_size: 70000
-  tensorboard_logdir: tb
+  # tensorboard_logdir: tb
   min_loss_scale: 1e-6
 
 checkpoint:

@@ -942,11 +942,12 @@ class Data2VecMultiModel(BaseFairseqModel):
                 if not keep_decoder:
                     self.modality_encoders[k].decoder = None
 
-        if self.adversarial_proj is not None:
-            self.adversarial_proj = None
-        if self.aadversarial_activation is not None:
-            self.aadversarial_activation = None
-        if self.adversarial_proj_head is not None:
-            self.adversarial_proj_head = None
-        if self.adversarial_weight is not None:
-            self.adversarial_weight = None
+        # FIX
+        # if self.adversarial_proj is not None:
+        #     self.adversarial_proj = None
+        # if self.aadversarial_activation is not None:
+        #     self.aadversarial_activation = None
+        # if self.adversarial_proj_head is not None:
+        #     self.adversarial_proj_head = None
+        # if self.adversarial_weight is not None:
+        #     self.adversarial_weight = None
