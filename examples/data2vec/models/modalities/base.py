@@ -338,8 +338,15 @@ class ModalitySpecificEncoder(nn.Module):
         clone_batch: int = 1,
         mask_seeds: Optional[torch.Tensor] = None,
         precomputed_mask=None,
+        **kwargs
     ):
         x = self.local_features(features)
+        interaction_mask = kwargs['interaction_mask'] if 'interaction_mask' in kwargs else None
+        min_length = min(x.shape[1], interaction_mask.shape[1])
+        x = x[:, :min_length]
+        interaction_mask = interaction_mask[:, :min_length]
+        mask_expanded = interaction_mask.unsqueeze(-1).expand_as(x)
+        x = x * mask_expanded.to(x.dtype)
         return self.contextualized_features(
             x,
             padding_mask,

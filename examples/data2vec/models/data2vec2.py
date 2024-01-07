@@ -489,6 +489,7 @@ class Data2VecMultiModel(BaseFairseqModel):
             clone_batch=self.cfg.clone_batch if not features_only else 1,
             mask_seeds=mask_seeds,
             precomputed_mask=precomputed_mask,
+            **kwargs
         )
 
         x = extractor_out["x"]
@@ -911,7 +912,7 @@ class Data2VecMultiModel(BaseFairseqModel):
             return torch.sqrt(y.var(dim=0) + 1e-6).mean()
 
     def extract_features(
-        self, source, mode=None, padding_mask=None, mask=False, remove_extra_tokens=True
+        self, source, mode=None, padding_mask=None, mask=False, remove_extra_tokens=True, **kwargs
     ):
         res = self.forward(
             source,
@@ -920,6 +921,7 @@ class Data2VecMultiModel(BaseFairseqModel):
             mask=mask,
             features_only=True,
             remove_extra_tokens=remove_extra_tokens,
+            **kwargs
         )
         return res
 

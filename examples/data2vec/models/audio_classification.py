@@ -524,6 +524,7 @@ class AudioClassificationModel(BaseFairseqModel):
             "source": source,
             "padding_mask": padding_mask,
             "mask": self.apply_mask and self.training,
+            "interaction_mask": kwargs['interaction_mask'] if 'interaction_mask' in kwargs else None
         }
 
         ft = self.freeze_finetune_updates <= self.num_updates
@@ -590,7 +591,8 @@ class AudioClassificationModel(BaseFairseqModel):
             raise Exception(f"unknown prediction mode {prediction_mode}")
 
         if label is None:
-            return torch.sigmoid(x) if logits else x
+            # return torch.sigmoid(x) if logits else x
+            return x if logits else x # ad-hoc for xai
 
         x = torch.nan_to_num(x)
 
